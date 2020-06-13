@@ -4,6 +4,7 @@ module Tree exposing (..)
 type alias TreeItem =
     { id : String
     , title : String
+    , isVisible : Bool
     , children : Maybe Children
     }
 
@@ -18,14 +19,49 @@ getResponses subs =
             items
 
 
+mapAllNodes : (TreeItem -> TreeItem) -> List TreeItem -> List TreeItem
+mapAllNodes mapper items =
+    List.map (mapItem mapper) items
+
+
+mapItem : (TreeItem -> TreeItem) -> TreeItem -> TreeItem
+mapItem mapper item =
+    case item.children of
+        Just someChildren ->
+            mapper { item | children = children (mapAllNodes mapper (getResponses someChildren)) }
+
+        Nothing ->
+            mapper item
+
+
+find : (TreeItem -> Bool) -> List TreeItem -> Maybe TreeItem
+find predicare items =
+    let
+        select : TreeItem -> List TreeItem
+        select node =
+            case node.children of
+                Just subs ->
+                    List.concat [ [ node ], List.concat (List.map select (getResponses subs)) ]
+
+                Nothing ->
+                    [ node ]
+
+        flatNodes =
+            List.map select items |> List.concat
+    in
+    List.filter predicare flatNodes |> List.head
+
+
 initialNodes : List TreeItem
 initialNodes =
     [ { title = "Trance"
       , id = "1"
+      , isVisible = True
       , children =
             children
                 [ { title = "Deep house"
                   , id = "0.8218925884000752"
+                  , isVisible = True
                   , children =
                         children
                             [ leafItem "6b71fb1aeeaa0db208ef3f7e" "Deep House Mix 2015 #92 | Tropical House Mix by Luca dot DJ"
@@ -49,6 +85,7 @@ initialNodes =
                             ]
                   }
                 , { title = "Boris Brejcha"
+                  , isVisible = True
                   , id = "0.90299175428736"
                   , children =
                         children
@@ -61,14 +98,16 @@ initialNodes =
                   }
                 , { title = "Other"
                   , id = "0.56135308959955"
+                  , isVisible = True
                   , children =
                         children
                             [ leafItem "086da56677a362590c0d41da" "Best of Shingo Nakamura 01 (2-Hour Melodic Progressive House Mix)"
                             , leafItem "0b37c502d09b5504648ba376" "Best of Shingo Nakamura 02 (2-Hour Melodic Progressive House Mix)"
                             ]
                   }
-                , { title = "Other"
-                  , id = "0.56135308959955"
+                , { title = "Radio Intese"
+                  , id = "0.3123123123213"
+                  , isVisible = True
                   , children =
                         children
                             [ leafItem "ecfe85ebc22287f3e0b9820a" "@Miss Monique  - Live @ Radio Intense 31.01.2017"
@@ -86,7 +125,7 @@ initialNodes =
                   }
                 ]
       }
-    , { title = "Ambient", id = "2", children = children [] }
+    , { title = "Ambient", isVisible = True, id = "2", children = children [] }
     ]
 
 
@@ -96,4 +135,4 @@ children items =
 
 leafItem : String -> String -> TreeItem
 leafItem id title =
-    { id = id, title = title, children = Maybe.Nothing }
+    { id = id, title = title, isVisible = True, children = Maybe.Nothing }

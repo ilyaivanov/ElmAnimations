@@ -1,4 +1,20 @@
-div>h3{
-    color: red;
-    font-size: 30px;
+body {
+    margin: 0;
+}
+
+
+.header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 50px;
+    border-bottom: rgb(236, 238, 240) 1px solid;
+    box-sizing: border-box;
+    background-color: white;
+}
+
+
+.page{
+    margin-top: 50px;
 }
