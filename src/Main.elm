@@ -1,10 +1,12 @@
 module Main exposing (..)
 
 import Browser
-import Html exposing (Html, button, div, span, text)
+import DragState exposing (DragState(..))
+import ExtraEvents exposing (attributeIf, classIf, onMouseMove, onMouseUp)
+import Html exposing (Attribute, Html, div, span, text)
 import Html.Attributes exposing (class, style)
 import Html.Events exposing (onClick)
-import Tree exposing (TreeItem, initialNodes)
+import Tree exposing (TreeItem, hasId, initialNodes)
 
 
 main =
@@ -14,6 +16,7 @@ main =
 type alias Model =
     { nodes : List TreeItem
     , focus : Focus
+    , dragState : DragState.DragState
     }
 
 
@@ -24,7 +27,10 @@ type Focus
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( { nodes = initialNodes, focus = Root }
+    ( { nodes = initialNodes
+      , focus = Root
+      , dragState = DragState.initialState
+      }
     , Cmd.none
     )
 
@@ -38,6 +44,7 @@ type Msg
     = ToggleVisibility String
     | SetFocus String
     | RemoveFocus
+    | DndAction DragState.DragMsg
     | None
 
 
@@ -49,6 +56,9 @@ update msg model =
 
         RemoveFocus ->
             ( { model | focus = Root }, Cmd.none )
+
+        DndAction subMsg ->
+            ( { model | dragState = DragState.update model.dragState subMsg }, Cmd.none )
 
         ToggleVisibility id ->
             let
@@ -67,19 +77,13 @@ update msg model =
 
 view : Model -> Html Msg
 view model =
-    let
-        flatNodes =
-            case model.focus of
-                Root ->
-                    Tree.getNodesFlattenedWithLevels model.nodes
-
-                Node nodeId ->
-                    Tree.getChildrenFlattenedWithLevels nodeId model.nodes
-    in
-    div []
+    div
+        [ attributeIf (DragState.shouldListenToDragEvents model.dragState) (onMouseMove (\n -> DndAction (DragState.MouseMove n)))
+        , attributeIf (DragState.shouldListenToDragEvents model.dragState) (onMouseUp (DndAction DragState.MouseUp))
+        ]
         [ viewHeader model
-        , div [ class "page" ]
-            (List.map viewNode flatNodes)
+        , viewPage model
+        , viewNodeBeingDragged model
         ]
 
 
@@ -123,9 +127,45 @@ viewHeader model =
         )
 
 
+viewPage model =
+    let
+        flatNodes =
+            case model.focus of
+                Root ->
+                    Tree.getNodesFlattenedWithLevels model.nodes
+
+                Node nodeId ->
+                    Tree.getChildrenFlattenedWithLevels nodeId model.nodes
+    in
+    div [ class "page", classIf (DragState.isDragging model.dragState) "page-during-drag" ]
+        (List.map viewNode flatNodes)
+
+
+viewNodeBeingDragged : Model -> Html Msg
+viewNodeBeingDragged model =
+    case model.dragState of
+        DraggingSomething mousePosition itemId ->
+            case Tree.find (hasId itemId) model.nodes of
+                Just node ->
+                    div [ class "box-container" ]
+                        [ div
+                            [ class "box"
+                            , style "top" (String.fromInt mousePosition.pageY ++ "px")
+                            , style "left" (String.fromInt mousePosition.pageX ++ "px")
+                            ]
+                            [ div [ class "bullet-outer" ] [ div [ class "bullet" ] [] ], text node.title ]
+                        ]
+
+                Nothing ->
+                    div [] []
+
+        _ ->
+            div [] []
+
+
 viewNode node =
     div
         [ class "row", style "margin-left" (String.fromInt (node.level * 20) ++ "px") ]
-        [ div [ class "bullet-outer", onClick (SetFocus node.id) ] [ div [ class "bullet" ] [] ]
+        [ div [ class "bullet-outer", onClick (SetFocus node.id), ExtraEvents.onMouseDown (\n -> DndAction (DragState.MouseDown node.id n)) ] [ div [ class "bullet" ] [] ]
         , span [ class "clickable-text", onClick (ToggleVisibility node.id) ] [ text node.title ]
         ]

@@ -4,6 +4,18 @@ body {
     font-size: 14px;
 }
 
+.page-during-drag {
+    user-select: none;
+    cursor: grabbing;
+}
+
+/*Unfortunately I don't know any other way to disable cursor effects on all nodes*/
+/*Thus I will need to disable ALL cursor effects in my app */
+.page-during-drag .clickable-text,
+.page-during-drag .bullet-outer {
+    cursor: inherit;
+}
+
 
 .header {
     position: fixed;
@@ -68,4 +80,36 @@ body {
 .bullet-outer:hover {
     background-color: rgb(183, 188, 191);
 
+}
+
+
+.box-container{
+    pointer-events: none;
+    overflow: hidden;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+}
+
+.box {
+    pointer-events: none;
+    background-color: white;
+    white-space: nowrap;
+    display: flex;
+    flex-direction: row;
+    position: absolute;
+    padding: 2px;
+    padding-right: 6px;
+    border-radius: 8px;
+    height: 20px;
+    /*I'm using translate to position box right in proper position with respect to the cursor*/
+    transform: translateX(-10px) translateY(-10px);
+
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.12),
+    0 2px 2px rgba(0, 0, 0, 0.12),
+    0 4px 4px rgba(0, 0, 0, 0.12),
+    0 8px 8px rgba(0, 0, 0, 0.12),
+    0 16px 16px rgba(0, 0, 0, 0.12);
 }
