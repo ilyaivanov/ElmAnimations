@@ -1,6 +1,7 @@
 module Main exposing (..)
 
 import Browser
+import Debug exposing (log)
 import Html exposing (Html, button, div, span, text)
 import Html.Attributes exposing (class, style)
 import Html.Events exposing (onClick)
@@ -13,14 +14,18 @@ main =
 
 type alias Model =
     { nodes : List TreeItem
-    , focused : Maybe TreeItem
-    , focusedParents : List TreeItem
+    , focus : Focus
     }
+
+
+type Focus
+    = Root
+    | Node String
 
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( { nodes = initialNodes, focused = Maybe.Nothing, focusedParents = [] }
+    ( { nodes = initialNodes, focus = Root }
     , Cmd.none
     )
 
@@ -41,10 +46,10 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         SetFocus itemId ->
-            ( { model | focused = Tree.find (\i -> i.id == itemId) model.nodes, focusedParents = Tree.getParents model.nodes itemId }, Cmd.none )
+            ( { model | focus = Node itemId }, Cmd.none )
 
         RemoveFocus ->
-            ( { model | focused = Nothing, focusedParents = [] }, Cmd.none )
+            ( { model | focus = Root }, Cmd.none )
 
         ToggleVisibility id ->
             let
@@ -64,7 +69,13 @@ update msg model =
 view : Model -> Html Msg
 view model =
     let
-        flatNodes = Tree.getNodesFlattenedWithLevels model.nodes
+        flatNodes =
+            case model.focus of
+                Root ->
+                    Tree.getNodesFlattenedWithLevels model.nodes
+
+                Node nodeId ->
+                    Tree.getChildrenFlattenedWithLevels nodeId model.nodes
     in
     div []
         [ viewHeader model
@@ -75,35 +86,42 @@ view model =
 
 viewHeader : Model -> Html Msg
 viewHeader model =
-    let
-        currentTitle =
-            Maybe.map (\m -> m.title) model.focused |> Maybe.withDefault ""
-
-        selectedPath =
-            model.focusedParents |> List.map (\n -> [ viewSplitter, viewPart n ]) |> List.concat
-
-        viewPart node =
-            span [ class "clickable-text breadcrumb-part", onClick (SetFocus node.id) ] [ text node.title ]
-
-        viewHome =
-            span [ class "clickable-text breadcrumb-part", onClick RemoveFocus ] [ text "Home" ]
-
-        viewNonClickablePart val =
-            span [ class "breadcrumb-part" ] [ text val ]
-
-        viewSplitter =
-            span [ class "splitter" ] [ text " > " ]
-
-        titles =
-            case model.focused of
-                Just _ ->
-                    [ [ viewHome ], selectedPath, [ viewSplitter ], [ viewNonClickablePart currentTitle ] ] |> List.concat
-
-                Nothing ->
-                    []
-    in
     div [ class "header" ]
-        titles
+        (case model.focus of
+            Node nodeId ->
+                let
+                    viewHome =
+                        span [ class "clickable-text breadcrumb-part", onClick RemoveFocus ] [ text "Home" ]
+
+                    parents =
+                        Tree.getParents model.nodes nodeId
+
+                    selectedNode =
+                        Tree.find (\n -> n.id == nodeId) model.nodes
+
+                    viewClickablePart : TreeItem -> Html Msg
+                    viewClickablePart node =
+                        span [ class "clickable-text breadcrumb-part", onClick (SetFocus node.id) ] [ text node.title ]
+
+                    intermediateParts =
+                        if List.isEmpty parents then
+                            []
+
+                        else
+                            (List.map viewClickablePart parents) ++ [ viewSplitter ]
+
+                    viewNonClickablePart : Maybe TreeItem -> Html Msg
+                    viewNonClickablePart val =
+                        Maybe.map (\n -> span [ class "breadcrumb-part" ] [ text n.title ]) val |> Maybe.withDefault (span [] [])
+
+                    viewSplitter =
+                        span [ class "splitter" ] [ text " > " ]
+                in
+                [ [ viewHome, viewSplitter ], intermediateParts, [ viewNonClickablePart selectedNode ] ] |> List.concat
+
+            Root ->
+                []
+        )
 
 
 viewNode node =

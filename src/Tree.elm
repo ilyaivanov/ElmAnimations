@@ -1,5 +1,7 @@
 module Tree exposing (..)
 
+import Debug exposing (log)
+
 
 type alias TreeItem =
     { id : String
@@ -36,8 +38,8 @@ mapItem mapper item =
 
 
 getParents : List TreeItem -> String -> List TreeItem
-getParents model itemId =
-    getParentsImp model itemId []
+getParents nodes itemId =
+    getParentsImp nodes itemId []
 
 
 getParentsImp nodes itemId parents =
@@ -62,6 +64,25 @@ hasChild id node =
 getNodesFlattenedWithLevels : List TreeItem -> List TreeItem
 getNodesFlattenedWithLevels nodes =
     List.map (flattenChildren 0) nodes |> List.concat
+
+
+getChildrenFlattenedWithLevels : String -> List TreeItem -> List TreeItem
+getChildrenFlattenedWithLevels itemId nodes =
+    let
+        nodeM =
+            find (\n -> n.id == itemId) nodes
+    in
+    case nodeM of
+        Just node ->
+            case node.children of
+                Just subs ->
+                    getChildren subs |> List.map (flattenChildren 0) |> List.concat
+
+                Nothing ->
+                    []
+
+        Nothing ->
+            []
 
 
 flattenChildren : Int -> TreeItem -> List TreeItem
