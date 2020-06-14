@@ -4,7 +4,7 @@ import Browser
 import Html exposing (Html, button, div, span, text)
 import Html.Attributes exposing (class, style)
 import Html.Events exposing (onClick)
-import Tree exposing (TreeItem, getResponses, initialNodes)
+import Tree exposing (TreeItem, initialNodes)
 
 
 main =
@@ -61,39 +61,10 @@ update msg model =
             ( model, Cmd.none )
 
 
-type alias TreeItemUiModel =
-    { id : String
-    , title : String
-    , level : Int
-    }
-
-
-createUiModel item level =
-    { id = item.id, title = item.title, level = level }
-
-
 view : Model -> Html Msg
 view model =
     let
-        getChild : Int -> TreeItem -> List TreeItemUiModel
-        getChild level n =
-            case ( n.children, n.isVisible ) of
-                ( Just children, True ) ->
-                    List.append [ createUiModel n level ] (List.concat (List.map (getChild (level + 1)) (getResponses children)))
-
-                _ ->
-                    [ createUiModel n level ]
-
-        nodes =
-            case model.focused of
-                Just focused ->
-                    focused.children |> Maybe.map getResponses |> Maybe.withDefault []
-
-                Nothing ->
-                    model.nodes
-
-        flatNodes =
-            List.concat (List.map (getChild 0) nodes)
+        flatNodes = Tree.getNodesFlattenedWithLevels model.nodes
     in
     div []
         [ viewHeader model

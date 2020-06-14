@@ -5,6 +5,7 @@ type alias TreeItem =
     { id : String
     , title : String
     , isVisible : Bool
+    , level : Int
     , children : Maybe Children
     }
 
@@ -13,7 +14,7 @@ type Children
     = Children (List TreeItem)
 
 
-getResponses subs =
+getChildren subs =
     case subs of
         Children items ->
             items
@@ -28,7 +29,7 @@ mapItem : (TreeItem -> TreeItem) -> TreeItem -> TreeItem
 mapItem mapper item =
     case item.children of
         Just someChildren ->
-            mapper { item | children = children (mapAllNodes mapper (getResponses someChildren)) }
+            mapper { item | children = children (mapAllNodes mapper (getChildren someChildren)) }
 
         Nothing ->
             mapper item
@@ -47,14 +48,31 @@ getParentsImp nodes itemId parents =
         Nothing ->
             parents
 
+
 hasChild : String -> TreeItem -> Bool
 hasChild id node =
     case node.children of
         Just subs ->
-            List.any (\sub -> sub.id == id) (getResponses subs)
+            List.any (\sub -> sub.id == id) (getChildren subs)
 
         Nothing ->
             False
+
+
+getNodesFlattenedWithLevels : List TreeItem -> List TreeItem
+getNodesFlattenedWithLevels nodes =
+    List.map (flattenChildren 0) nodes |> List.concat
+
+
+flattenChildren : Int -> TreeItem -> List TreeItem
+flattenChildren level n =
+    case ( n.children, n.isVisible ) of
+        ( Just subs, True ) ->
+            List.append [ { n | level = level } ] (List.concat (List.map (flattenChildren (level + 1)) (getChildren subs)))
+
+        _ ->
+            [ { n | level = level } ]
+
 
 find : (TreeItem -> Bool) -> List TreeItem -> Maybe TreeItem
 find predicate items =
@@ -63,7 +81,7 @@ find predicate items =
         select node =
             case node.children of
                 Just subs ->
-                    List.concat [ [ node ], List.concat (List.map select (getResponses subs)) ]
+                    List.concat [ [ node ], List.concat (List.map select (getChildren subs)) ]
 
                 Nothing ->
                     [ node ]
@@ -79,11 +97,13 @@ initialNodes =
     [ { title = "Trance"
       , id = "tranceNode"
       , isVisible = True
+      , level = 0
       , children =
             children
                 [ { title = "Deep house"
                   , id = "deepHouseNode"
                   , isVisible = True
+                  , level = 0
                   , children =
                         children
                             [ leafItem "6b71fb1aeeaa0db208ef3f7e" "Deep House Mix 2015 #92 | Tropical House Mix by Luca dot DJ"
@@ -108,6 +128,7 @@ initialNodes =
                   }
                 , { title = "Boris Brejcha"
                   , isVisible = True
+                  , level = 0
                   , id = "borisNode"
                   , children =
                         children
@@ -118,36 +139,9 @@ initialNodes =
                             , leafItem "5f344ec3707a56542478b657" "Boris Brejcha @ Art of Minimal Techno Tripping - Lucky Rabbit by RTTWLR"
                             ]
                   }
-                , { title = "Other"
-                  , id = "otherNode"
-                  , isVisible = True
-                  , children =
-                        children
-                            [ leafItem "086da56677a362590c0d41da" "Best of Shingo Nakamura 01 (2-Hour Melodic Progressive House Mix)"
-                            , leafItem "0b37c502d09b5504648ba376" "Best of Shingo Nakamura 02 (2-Hour Melodic Progressive House Mix)"
-                            ]
-                  }
-                , { title = "Radio Intese"
-                  , id = "radioIntenseNode"
-                  , isVisible = True
-                  , children =
-                        children
-                            [ leafItem "ecfe85ebc22287f3e0b9820a" "@Miss Monique  - Live @ Radio Intense 31.01.2017"
-                            , leafItem "f23be63deaa6949cec5a945e" "Miss Monique - Live @ Radio Intense 16.03.2016"
-                            , leafItem "13c7b32e893e92449ccb8545" "Miss Monique - MiMo Weekly Podcast #004 [Progressive Music]"
-                            , leafItem "1ad198dbcc37f761b2ec3eeb" "@Miss Monique  - Live @ Radio Intense 03.05.2018 // Progressive House, Techno Mix"
-                            , leafItem "de94a6b8886ded6f340be543" "Miss Monique - MiMo Weekly Podcast #004 [Progressive Music]"
-                            , leafItem "a5fec59a5cbab8753313db8f" "Xenia - Live @ Radio Intense 09.05.2017 // Techno Mix"
-                            , leafItem "9464edddf51a3655f71f6828" "Xenia - Live @ Radio Intense 24.02.2016 // Melodic Techno"
-                            , leafItem "3f8376c724da7844181cbb7a" "Xenia - Live @ Radio Intense 24.02.2016 // Melodic Techno"
-                            , leafItem "fc20c580cd864b4e829a1032" "Xenia - Live @ Radio Intense 25.10.2016"
-                            , leafItem "e7dbd8e5a6da8ee7c5c481e4" "Xenia @ DJanes.net 18.10.2018 // Progressive, Techno music"
-                            , leafItem "e050f79e8bcde076611fd604" "Xenia Meow  - Live @ Radio Intense 17.01.2017 (Ksenia Meow)"
-                            ]
-                  }
                 ]
       }
-    , { title = "Ambient", isVisible = True, id = "ambientNode", children = children [] }
+    , { title = "Ambient", isVisible = True, id = "ambientNode", level = 0, children = children [] }
     ]
 
 
@@ -157,4 +151,4 @@ children items =
 
 leafItem : String -> String -> TreeItem
 leafItem id title =
-    { id = id, title = title, isVisible = True, children = Maybe.Nothing }
+    { id = id, title = title, isVisible = True, children = Maybe.Nothing, level = 0 }
