@@ -34,8 +34,30 @@ mapItem mapper item =
             mapper item
 
 
+getParents : List TreeItem -> String -> List TreeItem
+getParents model itemId =
+    getParentsImp model itemId []
+
+
+getParentsImp nodes itemId parents =
+    case find (hasChild itemId) nodes of
+        Just parent ->
+            getParentsImp nodes parent.id (List.append [ parent ] parents)
+
+        Nothing ->
+            parents
+
+hasChild : String -> TreeItem -> Bool
+hasChild id node =
+    case node.children of
+        Just subs ->
+            List.any (\sub -> sub.id == id) (getResponses subs)
+
+        Nothing ->
+            False
+
 find : (TreeItem -> Bool) -> List TreeItem -> Maybe TreeItem
-find predicare items =
+find predicate items =
     let
         select : TreeItem -> List TreeItem
         select node =
@@ -49,18 +71,18 @@ find predicare items =
         flatNodes =
             List.map select items |> List.concat
     in
-    List.filter predicare flatNodes |> List.head
+    List.filter predicate flatNodes |> List.head
 
 
 initialNodes : List TreeItem
 initialNodes =
     [ { title = "Trance"
-      , id = "1"
+      , id = "tranceNode"
       , isVisible = True
       , children =
             children
                 [ { title = "Deep house"
-                  , id = "0.8218925884000752"
+                  , id = "deepHouseNode"
                   , isVisible = True
                   , children =
                         children
@@ -86,7 +108,7 @@ initialNodes =
                   }
                 , { title = "Boris Brejcha"
                   , isVisible = True
-                  , id = "0.90299175428736"
+                  , id = "borisNode"
                   , children =
                         children
                             [ leafItem "dd869e870550f28308e13ca5" "Boris Brejcha @ Art of Minimal Techno Tripping - The Mad Doctor by RTTWLR"
@@ -97,7 +119,7 @@ initialNodes =
                             ]
                   }
                 , { title = "Other"
-                  , id = "0.56135308959955"
+                  , id = "otherNode"
                   , isVisible = True
                   , children =
                         children
@@ -106,7 +128,7 @@ initialNodes =
                             ]
                   }
                 , { title = "Radio Intese"
-                  , id = "0.3123123123213"
+                  , id = "radioIntenseNode"
                   , isVisible = True
                   , children =
                         children
@@ -125,7 +147,7 @@ initialNodes =
                   }
                 ]
       }
-    , { title = "Ambient", isVisible = True, id = "2", children = children [] }
+    , { title = "Ambient", isVisible = True, id = "ambientNode", children = children [] }
     ]
 
 
