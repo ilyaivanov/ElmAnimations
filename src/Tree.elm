@@ -1,7 +1,5 @@
 module Tree exposing (..)
 
-import Debug exposing (log)
-
 
 type alias TreeItem =
     { id : String
@@ -55,7 +53,7 @@ hasChild : String -> TreeItem -> Bool
 hasChild id node =
     case node.children of
         Just subs ->
-            List.any (\sub -> sub.id == id) (getChildren subs)
+            List.any (hasId id) (getChildren subs)
 
         Nothing ->
             False
@@ -68,11 +66,7 @@ getNodesFlattenedWithLevels nodes =
 
 getChildrenFlattenedWithLevels : String -> List TreeItem -> List TreeItem
 getChildrenFlattenedWithLevels itemId nodes =
-    let
-        nodeM =
-            find (\n -> n.id == itemId) nodes
-    in
-    case nodeM of
+    case find (hasId itemId) nodes of
         Just node ->
             case node.children of
                 Just subs ->
@@ -173,3 +167,11 @@ children items =
 leafItem : String -> String -> TreeItem
 leafItem id title =
     { id = id, title = title, isVisible = True, children = Maybe.Nothing, level = 0 }
+
+
+
+-- UTILS
+
+
+hasId itemId node =
+    node.id == itemId

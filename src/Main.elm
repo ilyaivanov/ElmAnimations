@@ -1,7 +1,6 @@
 module Main exposing (..)
 
 import Browser
-import Debug exposing (log)
 import Html exposing (Html, button, div, span, text)
 import Html.Attributes exposing (class, style)
 import Html.Events exposing (onClick)
@@ -108,7 +107,7 @@ viewHeader model =
                             []
 
                         else
-                            (List.map viewClickablePart parents) ++ [ viewSplitter ]
+                            List.map viewClickablePart parents ++ [ viewSplitter ]
 
                     viewNonClickablePart : Maybe TreeItem -> Html Msg
                     viewNonClickablePart val =
@@ -126,5 +125,7 @@ viewHeader model =
 
 viewNode node =
     div
-        [ style "margin-left" (String.fromInt (node.level * 20) ++ "px") ]
-        [ span [ class "clickable-text", onClick (ToggleVisibility node.id) ] [ text node.title ], button [ onClick (SetFocus node.id) ] [ text "focus" ] ]
+        [ class "row", style "margin-left" (String.fromInt (node.level * 20) ++ "px") ]
+        [ div [ class "bullet-outer", onClick (SetFocus node.id) ] [ div [ class "bullet" ] [] ]
+        , span [ class "clickable-text", onClick (ToggleVisibility node.id) ] [ text node.title ]
+        ]
