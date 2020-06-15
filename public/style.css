@@ -32,8 +32,9 @@ body {
 
 
 .page {
-    margin-top: 70px;
-    margin-left: 20px;
+    padding-top: 70px;
+    padding-left: 20px;
+    height: calc(100vh - 70px);
 }
 
 .breadcrumb-part {
@@ -54,9 +55,31 @@ body {
 }
 
 .row {
+    height: 30px;
     display: flex;
     align-items: center;
-    margin-bottom: 2px;
+    position: relative;
+}
+
+.placement-line {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background-color: lightgray;
+    pointer-events: none;
+    transform: translateY(-2px);
+}
+
+.placement-line.bottom {
+    top: inherit;
+    transform: translateY(2px);
+    bottom: 0;
+}
+
+.row-being-dragged {
+    color: gray;
 }
 
 .bullet {
@@ -83,7 +106,7 @@ body {
 }
 
 
-.box-container{
+.box-container {
     pointer-events: none;
     overflow: hidden;
     position: absolute;

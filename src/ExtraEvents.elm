@@ -9,6 +9,8 @@ import Json.Decode as Json
 type alias MouseMoveEvent =
     { pageX : Int
     , pageY : Int
+    , layerX : Int
+    , layerY : Int
     , buttons : Int
     }
 
@@ -35,7 +37,10 @@ onMouseDown tagger =
     on "mousedown" (Json.map tagger mouseDownDecoder)
 
 
+
 --noinspection ALL
+
+
 onMouseDownAlwaysStopPropagation : msg -> Attribute msg
 onMouseDownAlwaysStopPropagation msg =
     stopPropagationOn "mousedown" (Json.map alwaysStop (Json.succeed msg))
@@ -45,7 +50,11 @@ onMouseUp : msg -> Attribute msg
 onMouseUp tagger =
     on "mouseup" (Json.succeed tagger)
 
+
+
 --noinspection ALL
+
+
 onMouseEnter : msg -> Attribute msg
 onMouseEnter tagger =
     on "mouseenter" (Json.succeed tagger)
@@ -58,9 +67,11 @@ mouseDownDecoder =
 
 mouseMoveDecoder : Json.Decoder MouseMoveEvent
 mouseMoveDecoder =
-    Json.map3 MouseMoveEvent
+    Json.map5 MouseMoveEvent
         (Json.field "pageX" Json.int)
         (Json.field "pageY" Json.int)
+        (Json.field "layerX" Json.int)
+        (Json.field "layerY" Json.int)
         (Json.field "buttons" Json.int)
 
 
@@ -70,12 +81,20 @@ offsetsDecoder =
         (Json.field "offsetX" Json.int)
         (Json.field "offsetY" Json.int)
 
+
+
 --noinspection ALL
+
+
 onKeyUp : (String -> msg) -> Attribute msg
 onKeyUp tagger =
     on "keyup" (Json.map tagger (Json.field "key" Json.string))
 
+
+
 --noinspection ALL
+
+
 onClickAlwaysStopPropagation : msg -> Attribute msg
 onClickAlwaysStopPropagation msg =
     stopPropagationOn "mousedown" (Json.map alwaysStop (Json.succeed msg))
@@ -84,7 +103,11 @@ onClickAlwaysStopPropagation msg =
 alwaysStop x =
     ( x, True )
 
+
+
 --noinspection ALL
+
+
 onClickIf : Bool -> msg -> Attribute msg
 onClickIf condition msg =
     if condition then
@@ -109,8 +132,8 @@ attributeIf condition attribute =
         attribute
 
     else
-       emptyAttribute
+        emptyAttribute
 
 
 emptyAttribute =
-    class ""
+    style "" ""

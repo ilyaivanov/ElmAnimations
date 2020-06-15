@@ -1,7 +1,7 @@
 module Main exposing (..)
 
 import Browser
-import DragState exposing (DragState(..))
+import DragState exposing (DragState(..), getNodeBeingDragged, getNodeBeingDraggedOver)
 import ExtraEvents exposing (attributeIf, classIf, onMouseMove, onMouseUp)
 import Html exposing (Attribute, Html, div, span, text)
 import Html.Attributes exposing (class, style)
@@ -80,6 +80,8 @@ view model =
     div
         [ attributeIf (DragState.shouldListenToDragEvents model.dragState) (onMouseMove (\n -> DndAction (DragState.MouseMove n)))
         , attributeIf (DragState.shouldListenToDragEvents model.dragState) (onMouseUp (DndAction DragState.MouseUp))
+        , class "page"
+        , classIf (DragState.isDragging model.dragState) "page-during-drag"
         ]
         [ viewHeader model
         , viewPage model
@@ -127,24 +129,11 @@ viewHeader model =
         )
 
 
-viewPage model =
-    let
-        flatNodes =
-            case model.focus of
-                Root ->
-                    Tree.getNodesFlattenedWithLevels model.nodes
-
-                Node nodeId ->
-                    Tree.getChildrenFlattenedWithLevels nodeId model.nodes
-    in
-    div [ class "page", classIf (DragState.isDragging model.dragState) "page-during-drag" ]
-        (List.map viewNode flatNodes)
-
 
 viewNodeBeingDragged : Model -> Html Msg
 viewNodeBeingDragged model =
     case model.dragState of
-        DraggingSomething mousePosition itemId ->
+        DraggingSomething mousePosition itemId _ ->
             case Tree.find (hasId itemId) model.nodes of
                 Just node ->
                     div [ class "box-container" ]
@@ -163,9 +152,57 @@ viewNodeBeingDragged model =
             div [] []
 
 
-viewNode node =
+viewPage model =
+    let
+        flatNodes =
+            case model.focus of
+                Root ->
+                    Tree.getNodesFlattenedWithLevels model.nodes
+
+                Node nodeId ->
+                    Tree.getChildrenFlattenedWithLevels nodeId model.nodes
+    in
+    div []
+        (List.map (viewNode model) flatNodes)
+
+
+viewNode : Model -> TreeItem -> Html Msg
+viewNode model node =
+    let
+        nodeBeingDraggedId =
+            getNodeBeingDragged model.dragState
+
+        nodeBeingDraggedOverId =
+            getNodeBeingDraggedOver model.dragState
+
+        shouldListenToDragEvents =
+            DragState.shouldListenToDragEvents model.dragState
+    in
     div
-        [ class "row", style "margin-left" (String.fromInt (node.level * 20) ++ "px") ]
-        [ div [ class "bullet-outer", onClick (SetFocus node.id), ExtraEvents.onMouseDown (\n -> DndAction (DragState.MouseDown node.id n)) ] [ div [ class "bullet" ] [] ]
-        , span [ class "clickable-text", onClick (ToggleVisibility node.id) ] [ text node.title ]
+        [ class "row"
+        , classIf (maybeHasValue nodeBeingDraggedId node.id) "row-being-dragged"
+        , style "margin-left" (String.fromInt (node.level * 20) ++ "px")
+        , attributeIf shouldListenToDragEvents (ExtraEvents.onMouseMove (\n -> DndAction (DragState.MouseOver n node.id)))
         ]
+        [ div
+            [ class "bullet-outer"
+            , onClick (SetFocus node.id)
+            , ExtraEvents.onMouseDown (\n -> DndAction (DragState.MouseDown node.id n))
+            ]
+            [ div [ class "bullet" ] [] ]
+        , span [ class "clickable-text", onClick (ToggleVisibility node.id) ] [ text node.title ]
+        , if maybeHasValue nodeBeingDraggedOverId node.id then
+            div [ class "placement-line", classIf (DragState.isDragginOnBottom model.dragState) "bottom" ] []
+
+          else
+            div [] []
+        ]
+
+
+maybeHasValue maybe value =
+    case maybe of
+        Just val ->
+            val == value
+
+        Nothing ->
+            False
