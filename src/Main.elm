@@ -4,10 +4,10 @@ import Browser
 import Debug exposing (log)
 import DragState exposing (DragState(..), getNodeBeingDragged, getNodeBeingDraggedOver)
 import ExtraEvents exposing (attributeIf, classIf, elementIf, onMouseMove, onMouseUp)
-import Html exposing (Attribute, Html, div, span, text)
-import Html.Attributes exposing (class, style)
+import Html exposing (Attribute, Html, div, img, span, text)
+import Html.Attributes exposing (class, src, style)
 import Html.Events exposing (onClick)
-import Tree exposing (TreeItem, hasId, initialNodes)
+import Tree exposing (NodePayload(..), TreeItem, getChildrenForNode, hasId, initialNodes)
 
 
 main =
@@ -85,7 +85,7 @@ view model =
         , classIf (DragState.isDragging model.dragState) "page-during-drag"
         ]
         [ viewHeader model
-        , viewPage model
+        , viewSample model
         , viewNodeBeingDragged model
         ]
 
@@ -152,92 +152,48 @@ viewNodeBeingDragged model =
             div [] []
 
 
-viewPage : Model -> Html Msg
-viewPage model =
-    let
-        flatNodes =
-            Tree.getNodesFlattenedWithLevels model.nodes
-
-        nodeFocused =
-            List.filter (hasId (nodeIdFocused model.focus)) flatNodes
-                |> List.head
-                |> Maybe.map .level
-                |> Maybe.withDefault 0
-                |> (*) -20
-                |> log "left"
-
-        indexOfNode =
-            List.indexedMap Tuple.pair flatNodes
-                |> List.filter (\t -> (Tuple.second t).id == nodeIdFocused model.focus)
-                |> List.head
-                |> Maybe.map Tuple.first
-                |> Maybe.withDefault 0
-                |> (*) -20
-                |> log "top"
-    in
-    div
-        [ class "nodes-container"
-        , style "margin-top" (String.fromInt indexOfNode ++ "px")
-        , style "margin-left" (String.fromInt nodeFocused ++ "px")
-        ]
-        (List.indexedMap (viewNode model) flatNodes)
+viewSample : Model -> Html Msg
+viewSample model =
+    div []
+        (List.map viewNode model.nodes)
 
 
-viewNode : Model -> Int -> TreeItem -> Html Msg
-viewNode model sequentialPosition node =
-    let
-        nodeBeingDraggedId =
-            getNodeBeingDragged model.dragState
+type alias Point =
+    { x : Int, y : Int }
 
-        nodeBeingDraggedOverId =
-            getNodeBeingDraggedOver model.dragState
 
-        shouldListenToDragEvents =
-            DragState.shouldListenToDragEvents model.dragState
-    in
-    div
-        [ class "row"
-        , style "top" (String.fromInt (sequentialPosition * 20) ++ "px")
-        , style "left" (String.fromInt (node.level * 20) ++ "px")
-        , classIf (maybeHasValue nodeBeingDraggedId node.id) "row-being-dragged"
-        , attributeIf shouldListenToDragEvents (ExtraEvents.onMouseMove (\n -> DndAction (DragState.MouseOver n node.id)))
-        ]
-        [ div
-            [ class "bullet-outer"
-            , onClick (SetFocus node.id)
-            , ExtraEvents.onMouseDown (\n -> DndAction (DragState.MouseDown node.id n))
+viewNode : TreeItem -> Html Msg
+viewNode node =
+    div [ class "row" ]
+        [ div [ class "row-title" ]
+            [ viewNodeImage
+                [ onClick (SetFocus node.id)
+                , ExtraEvents.onMouseDown (\n -> DndAction (DragState.MouseDown node.id n))
+                ]
+                node.payload
+            , text node.title
             ]
-            [ div [ class "bullet" ] [] ]
-        , span [ class "clickable-text", onClick (ToggleVisibility node.id) ]
-            [ text node.title ]
-        , elementIf (maybeHasValue nodeBeingDraggedOverId node.id) (viewPlacementText model.dragState)
+        , div [ class "children-area" ]
+            (List.map viewNode (getChildrenForNode node))
         ]
 
 
-viewPlacementText dragState =
-    let
-        message =
-            if DragState.isDragginOnBottom dragState then
-                "place after"
+viewNodeImage attributes payload =
+    case payload of
+        Playlist ->
+            div
+                (List.append attributes
+                    [ class "bullet-outer"
+                    ]
+                )
+                []
 
-            else
-                "place before"
-    in
-    span [ class "placement-text" ] [ text message ]
+        Video id ->
+            img
+                (List.append attributes
+                    [ class "bullet-outer video-image"
+                    , src ("https://i.ytimg.com/vi/" ++ id ++ "/default.jpg")
+                    ]
+                )
+                []
 
-
-nodeIdFocused focus =
-    case focus of
-        Node id ->
-            id
-
-        Root ->
-            ""
-
-maybeHasValue maybe value =
-    case maybe of
-        Just val ->
-            val == value
-
-        Nothing ->
-            False
