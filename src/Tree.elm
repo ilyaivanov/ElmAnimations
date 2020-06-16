@@ -19,7 +19,6 @@ getChildren subs =
         Children items ->
             items
 
-
 mapAllNodes : (TreeItem -> TreeItem) -> List TreeItem -> List TreeItem
 mapAllNodes mapper items =
     List.map (mapItem mapper) items
@@ -29,7 +28,7 @@ mapItem : (TreeItem -> TreeItem) -> TreeItem -> TreeItem
 mapItem mapper item =
     case item.children of
         Just someChildren ->
-            mapper { item | children = children (mapAllNodes mapper (getChildren someChildren)) }
+            mapper { item | children = withChildren (mapAllNodes mapper (getChildren someChildren)) }
 
         Nothing ->
             mapper item
@@ -62,21 +61,6 @@ hasChild id node =
 getNodesFlattenedWithLevels : List TreeItem -> List TreeItem
 getNodesFlattenedWithLevels nodes =
     List.map (flattenChildren 0) nodes |> List.concat
-
-
-getChildrenFlattenedWithLevels : String -> List TreeItem -> List TreeItem
-getChildrenFlattenedWithLevels itemId nodes =
-    case find (hasId itemId) nodes of
-        Just node ->
-            case node.children of
-                Just subs ->
-                    getChildren subs |> List.map (flattenChildren 0) |> List.concat
-
-                Nothing ->
-                    []
-
-        Nothing ->
-            []
 
 
 flattenChildren : Int -> TreeItem -> List TreeItem
@@ -114,13 +98,13 @@ initialNodes =
       , isVisible = True
       , level = 0
       , children =
-            children
+            withChildren
                 [ { title = "Deep house"
                   , id = "deepHouseNode"
                   , isVisible = True
                   , level = 0
                   , children =
-                        children
+                        withChildren
                             [ leafItem "6b71fb1aeeaa0db208ef3f7e" "Deep House Mix 2015 #92 | Tropical House Mix by Luca dot DJ"
                             , leafItem "59ee76602effda59422b1c26" "The Best Of Vocal Deep House Nu Disco 2013 (2 Hour Mixed By Zeni N)"
                             , leafItem "247ca74070c99d7c941f64c5" "Deep House Mix 2015 #85 | New House Music Mixed by XYPO"
@@ -146,7 +130,7 @@ initialNodes =
                   , level = 0
                   , id = "borisNode"
                   , children =
-                        children
+                        withChildren
                             [ leafItem "dd869e870550f28308e13ca5" "Boris Brejcha @ Art of Minimal Techno Tripping - The Mad Doctor by RTTWLR"
                             , leafItem "f28cfb99ddc1cea9c595b73e" "Boris Brejcha @ Art of Minimal Techno Tripping - Mickey &amp; Bad Hot Dogs by RTTWLR"
                             , leafItem "5f2a81e164b6b2ee580243fb" "Boris Brejcha & Trippy Code @ Art of Minimal Techno & Melodic Good Life Radio 24/7 Live"
@@ -156,11 +140,11 @@ initialNodes =
                   }
                 ]
       }
-    , { title = "Ambient", isVisible = True, id = "ambientNode", level = 0, children = children [] }
+    , { title = "Ambient", isVisible = True, id = "ambientNode", level = 0, children = withChildren [] }
     ]
 
 
-children items =
+withChildren items =
     Maybe.Just (Children items)
 
 

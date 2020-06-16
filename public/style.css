@@ -37,6 +37,11 @@ body {
     height: calc(100vh - 70px);
 }
 
+.nodes-container{
+    position: relative;
+    transition: margin-left 0.3s, margin-top 0.3s;
+}
+
 .breadcrumb-part {
     margin-left: 12px;
     margin-right: 12px;
@@ -55,27 +60,23 @@ body {
 }
 
 .row {
+    position: absolute;
     height: 30px;
     display: flex;
     align-items: center;
-    position: relative;
+    opacity: 1;
+    transition: opacity 0.3s;
 }
-
-.placement-line {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 4px;
-    background-color: lightgray;
+.row-inactive{
     pointer-events: none;
-    transform: translateY(-2px);
+    opacity: 0;
 }
 
-.placement-line.bottom {
-    top: inherit;
-    transform: translateY(2px);
-    bottom: 0;
+.placement-text{
+    margin-left: 10px;
+    color:grey;
+    font-size: 12px;
+    text-decoration: none;
 }
 
 .row-being-dragged {

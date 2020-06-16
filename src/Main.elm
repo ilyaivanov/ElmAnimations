@@ -1,8 +1,9 @@
 module Main exposing (..)
 
 import Browser
+import Debug exposing (log)
 import DragState exposing (DragState(..), getNodeBeingDragged, getNodeBeingDraggedOver)
-import ExtraEvents exposing (attributeIf, classIf, onMouseMove, onMouseUp)
+import ExtraEvents exposing (attributeIf, classIf, elementIf, onMouseMove, onMouseUp)
 import Html exposing (Attribute, Html, div, span, text)
 import Html.Attributes exposing (class, style)
 import Html.Events exposing (onClick)
@@ -129,7 +130,6 @@ viewHeader model =
         )
 
 
-
 viewNodeBeingDragged : Model -> Html Msg
 viewNodeBeingDragged model =
     case model.dragState of
@@ -152,22 +152,39 @@ viewNodeBeingDragged model =
             div [] []
 
 
+viewPage : Model -> Html Msg
 viewPage model =
     let
         flatNodes =
-            case model.focus of
-                Root ->
-                    Tree.getNodesFlattenedWithLevels model.nodes
+            Tree.getNodesFlattenedWithLevels model.nodes
 
-                Node nodeId ->
-                    Tree.getChildrenFlattenedWithLevels nodeId model.nodes
+        nodeFocused =
+            List.filter (hasId (nodeIdFocused model.focus)) flatNodes
+                |> List.head
+                |> Maybe.map .level
+                |> Maybe.withDefault 0
+                |> (*) -20
+                |> log "left"
+
+        indexOfNode =
+            List.indexedMap Tuple.pair flatNodes
+                |> List.filter (\t -> (Tuple.second t).id == nodeIdFocused model.focus)
+                |> List.head
+                |> Maybe.map Tuple.first
+                |> Maybe.withDefault 0
+                |> (*) -20
+                |> log "top"
     in
-    div []
-        (List.map (viewNode model) flatNodes)
+    div
+        [ class "nodes-container"
+        , style "margin-top" (String.fromInt indexOfNode ++ "px")
+        , style "margin-left" (String.fromInt nodeFocused ++ "px")
+        ]
+        (List.indexedMap (viewNode model) flatNodes)
 
 
-viewNode : Model -> TreeItem -> Html Msg
-viewNode model node =
+viewNode : Model -> Int -> TreeItem -> Html Msg
+viewNode model sequentialPosition node =
     let
         nodeBeingDraggedId =
             getNodeBeingDragged model.dragState
@@ -180,8 +197,9 @@ viewNode model node =
     in
     div
         [ class "row"
+        , style "top" (String.fromInt (sequentialPosition * 20) ++ "px")
+        , style "left" (String.fromInt (node.level * 20) ++ "px")
         , classIf (maybeHasValue nodeBeingDraggedId node.id) "row-being-dragged"
-        , style "margin-left" (String.fromInt (node.level * 20) ++ "px")
         , attributeIf shouldListenToDragEvents (ExtraEvents.onMouseMove (\n -> DndAction (DragState.MouseOver n node.id)))
         ]
         [ div
@@ -190,14 +208,31 @@ viewNode model node =
             , ExtraEvents.onMouseDown (\n -> DndAction (DragState.MouseDown node.id n))
             ]
             [ div [ class "bullet" ] [] ]
-        , span [ class "clickable-text", onClick (ToggleVisibility node.id) ] [ text node.title ]
-        , if maybeHasValue nodeBeingDraggedOverId node.id then
-            div [ class "placement-line", classIf (DragState.isDragginOnBottom model.dragState) "bottom" ] []
-
-          else
-            div [] []
+        , span [ class "clickable-text", onClick (ToggleVisibility node.id) ]
+            [ text node.title ]
+        , elementIf (maybeHasValue nodeBeingDraggedOverId node.id) (viewPlacementText model.dragState)
         ]
 
+
+viewPlacementText dragState =
+    let
+        message =
+            if DragState.isDragginOnBottom dragState then
+                "place after"
+
+            else
+                "place before"
+    in
+    span [ class "placement-text" ] [ text message ]
+
+
+nodeIdFocused focus =
+    case focus of
+        Node id ->
+            id
+
+        Root ->
+            ""
 
 maybeHasValue maybe value =
     case maybe of

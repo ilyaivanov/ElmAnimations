@@ -135,5 +135,18 @@ attributeIf condition attribute =
         emptyAttribute
 
 
+elementIf : Bool -> Html msg -> Html msg
+elementIf condition element =
+    if condition then
+        element
+
+    else
+        emptyElement
+
+
 emptyAttribute =
     style "" ""
+
+
+emptyElement =
+    text ""
