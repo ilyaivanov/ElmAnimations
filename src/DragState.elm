@@ -1,6 +1,13 @@
 module DragState exposing (..)
 
-import ExtraEvents exposing (MouseDownEvent, MouseMoveEvent)
+import ExtraEvents exposing (MouseDownEvent, MouseMoveEvent, emptyElement)
+import Html exposing (Html, div)
+import Html.Attributes exposing (class, style)
+import Tree exposing (TreeItem, findNodeByYCoordinates)
+
+
+rowHeight =
+    35
 
 
 type DragState
@@ -21,6 +28,7 @@ type DragMsg
     | MouseMove MouseMoveEvent
     | MouseDown String MouseDownEvent
     | MouseOver MouseMoveEvent String
+
 
 shouldListenToDragEvents : DragState -> Bool
 shouldListenToDragEvents dragState =
@@ -50,6 +58,15 @@ getNodeBeingDraggedOver dragState =
     case dragState of
         DraggingSomething _ _ idMaybe ->
             idMaybe |> Maybe.map .itemId
+
+        _ ->
+            Nothing
+
+
+getDraggingCoords dragState =
+    case dragState of
+        DraggingSomething event _ idMaybe ->
+            Just event
 
         _ ->
             Nothing
@@ -94,6 +111,53 @@ update state msg =
             NoDrag
 
 
+type Placement
+    = PlaceBefore String
+    | PlaceAfter String
+
+handlePlacement: List TreeItem -> DragState -> List TreeItem
+handlePlacement nodes dragState =
+    nodes
+
+viewDragIndicator : DragState -> List TreeItem -> Html msg
+viewDragIndicator dragState nodes =
+    case dragState of
+        DraggingSomething newMousePosition nodeBeingDragged _ ->
+            let
+                yPosition =
+                    newMousePosition.layerY
+
+                --This will be used to restrict drop-indicator position
+                nodeUnder =
+                    findNodeByYCoordinates (yPosition // rowHeight) nodes
+
+                isOnSecondHalf =
+                    remainderBy rowHeight yPosition > (rowHeight // 2)
+
+                nodesPosition =
+                    { x = newMousePosition.layerX // rowHeight * rowHeight
+                    , y =
+                        yPosition
+                            // rowHeight
+                            * rowHeight
+                            + (if isOnSecondHalf then
+                                rowHeight
+
+                               else
+                                0
+                              )
+                    }
+            in
+            div
+                [ class "drop-indicator"
+                , style "top" (String.fromInt nodesPosition.y ++ "px")
+                ]
+                []
+
+        _ ->
+            emptyElement
+
+
 getDistance : MouseMoveEvent -> MouseMoveEvent -> Float
 getDistance point1 point2 =
     sqrt
@@ -106,24 +170,19 @@ getDistance point1 point2 =
         )
 
 
-isDragging dragState =
+isDraggingNode dragState nodeId =
     case dragState of
-        DraggingSomething _ _ _ ->
-            True
+        DraggingSomething _ id _ ->
+            nodeId == id
 
         _ ->
             False
 
 
-isDragginOnBottom dragState =
+isDragging dragState =
     case dragState of
-        DraggingSomething _ _ itemUnderInfo ->
-            case itemUnderInfo of
-                Just itemUnder ->
-                    itemUnder.verticalOffset > 15
-
-                _ ->
-                    False
+        DraggingSomething _ _ _ ->
+            True
 
         _ ->
             False

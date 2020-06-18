@@ -1,5 +1,7 @@
 module Tree exposing (..)
 
+import Debug exposing (log)
+
 
 type alias TreeItem =
     { id : String
@@ -103,6 +105,32 @@ find predicate items =
     List.filter predicate flatNodes |> List.head
 
 
+type alias Point =
+    { x : Int, y : Int }
+
+
+findNodeByYCoordinates : Int -> List TreeItem -> Maybe TreeItem
+findNodeByYCoordinates yCoordinate nodes =
+    let
+        flatnodes =
+            getNodesFlattenedWithLevels nodes |> List.indexedMap Tuple.pair
+
+        tupleHaveFirstValue val tuple =
+            Tuple.first tuple == val
+    in
+    flatnodes |> List.filter (tupleHaveFirstValue yCoordinate) |> List.head |> Maybe.map Tuple.second
+
+
+
+--findNodeByXYCoordinatesImp : Point -> List TreeItem -> Maybe TreeItem
+--findNodeByXYCoordinatesImp point nodes =
+--    let
+--        filter ( index, map ) =
+--            index == point.y
+--    in
+--    List.indexedMap Tuple.pair nodes |> List.filter
+
+
 initialNodes : List TreeItem
 initialNodes =
     [ { title = "Trance"
@@ -129,7 +157,7 @@ initialNodes =
                             , leafItem "661422b5f047f7ae37278e2a" "Y3lloW - Deep House Vocals Winter 2014 Vol.1 HQ"
                             , leafItem "c28910e52f36c5272e4dfb9e" "Deep House Mix 2015 #85 | New House Music Mixed by XYPO"
                             , leafItem "2038c5413d5fd3a8926defe3" "DEEP HOUSE MIX 2015 (1Hour) | Chilled Deep | Vol. 2"
-                            , leafItem "f49a66b88ef98cbd9789554c" "Best Deep House Vocal Mix 2015 (1Hour) | Vol. 5"
+                            , leafItemWithYoutube "f49a66b88ef98cbd9789554c" "I'm a happy woman" "HvIqTfiLo4w"
                             , leafItem "704ac83a21261b906a8208fd" "Deep House Mix 2015 #75 | New Music Mixed by Melody4emotion"
                             , leafItem "197ea501c4264a23c07b84f4" "Deep House Chill Out Lounge Music | Mixed By Dj Regard | 2013 |"
                             , leafItem "55a3af3327dea10d6862c7b6" "♫ Best Deep House Mix 2018 Vol. #1 ♫"
@@ -201,7 +229,12 @@ withChildren items =
 
 leafItem : String -> String -> TreeItem
 leafItem id title =
-    { id = id, title = title, payload = Video "zIjPoj8a4Ko", isVisible = True, children = Maybe.Nothing, level = 0 }
+    leafItemWithYoutube id title "zIjPoj8a4Ko"
+
+
+leafItemWithYoutube : String -> String -> String -> TreeItem
+leafItemWithYoutube id title videoId =
+    { id = id, title = title, payload = Video videoId, isVisible = True, children = Maybe.Nothing, level = 0 }
 
 
 

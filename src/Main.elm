@@ -2,11 +2,12 @@ module Main exposing (..)
 
 import Browser
 import Debug exposing (log)
-import DragState exposing (DragState(..), getNodeBeingDragged, getNodeBeingDraggedOver)
-import ExtraEvents exposing (attributeIf, classIf, elementIf, onMouseMove, onMouseUp)
+import DragState exposing (DragState(..), rowHeight)
+import ExtraEvents exposing (MouseMoveEvent, attributeIf, classIf, elementIf, onMouseMove, onMouseUp)
 import Html exposing (Attribute, Html, div, img, span, text)
-import Html.Attributes exposing (class, src, style)
+import Html.Attributes exposing (class, draggable, src, style)
 import Html.Events exposing (onClick)
+import MaybeExtra
 import Tree exposing (NodePayload(..), TreeItem, getChildrenForNode, hasId, initialNodes)
 
 
@@ -46,6 +47,7 @@ type Msg
     | SetFocus String
     | RemoveFocus
     | DndAction DragState.DragMsg
+    | DropItem
     | None
 
 
@@ -57,6 +59,24 @@ update msg model =
 
         RemoveFocus ->
             ( { model | focus = Root }, Cmd.none )
+
+        DropItem ->
+            let
+                a =
+                    DragState.getDraggingCoords model.dragState
+
+                getCoord b =
+                    Tree.findNodeByYCoordinates (b.layerY // rowHeight) model.nodes
+
+                foo =
+                    log "drop" (a |> Maybe.map getCoord |> MaybeExtra.join |> Maybe.map .title)
+            in
+            ( { model
+                | dragState = DragState.update model.dragState DragState.MouseUp
+                , nodes = DragState.handlePlacement model.nodes model.dragState
+              }
+            , Cmd.none
+            )
 
         DndAction subMsg ->
             ( { model | dragState = DragState.update model.dragState subMsg }, Cmd.none )
@@ -78,14 +98,19 @@ update msg model =
 
 view : Model -> Html Msg
 view model =
+    let
+        isListeningToEvents =
+            DragState.shouldListenToDragEvents model.dragState
+    in
     div
-        [ attributeIf (DragState.shouldListenToDragEvents model.dragState) (onMouseMove (\n -> DndAction (DragState.MouseMove n)))
-        , attributeIf (DragState.shouldListenToDragEvents model.dragState) (onMouseUp (DndAction DragState.MouseUp))
+        [ attributeIf isListeningToEvents (onMouseMove (\n -> DndAction (DragState.MouseMove n)))
+        , attributeIf isListeningToEvents (onMouseUp DropItem)
         , class "page"
         , classIf (DragState.isDragging model.dragState) "page-during-drag"
         ]
         [ viewHeader model
         , viewSample model
+        , DragState.viewDragIndicator model.dragState model.nodes
         , viewNodeBeingDragged model
         ]
 
@@ -139,8 +164,8 @@ viewNodeBeingDragged model =
                     div [ class "box-container" ]
                         [ div
                             [ class "box"
-                            , style "top" (String.fromInt mousePosition.pageY ++ "px")
-                            , style "left" (String.fromInt mousePosition.pageX ++ "px")
+                            , style "top" (String.fromInt mousePosition.layerY ++ "px")
+                            , style "left" (String.fromInt mousePosition.layerX ++ "px")
                             ]
                             [ div [ class "bullet-outer" ] [ div [ class "bullet" ] [] ], text node.title ]
                         ]
@@ -154,27 +179,42 @@ viewNodeBeingDragged model =
 
 viewSample : Model -> Html Msg
 viewSample model =
-    div []
-        (List.map viewNode model.nodes)
+    let
+        focusPointMaybe =
+            case model.focus of
+                Node id ->
+                    Tree.find (hasId id) model.nodes
+
+                Root ->
+                    Nothing
+    in
+    case focusPointMaybe of
+        Just node ->
+            div
+                []
+                [ div [ class "focused-element" ] [ text node.title ]
+                , div [] (List.map (viewNode model.dragState) (getChildrenForNode node))
+                ]
+
+        Nothing ->
+            div [] (List.map (viewNode model.dragState) model.nodes)
 
 
-type alias Point =
-    { x : Int, y : Int }
-
-
-viewNode : TreeItem -> Html Msg
-viewNode node =
+viewNode : DragState -> TreeItem -> Html Msg
+viewNode dragState node =
     div [ class "row" ]
         [ div [ class "row-title" ]
             [ viewNodeImage
-                [ onClick (SetFocus node.id)
+                [ attributeIf (not (DragState.isDraggingNode dragState node.id)) (onClick (SetFocus node.id))
                 , ExtraEvents.onMouseDown (\n -> DndAction (DragState.MouseDown node.id n))
                 ]
                 node.payload
-            , text node.title
+            , div [ onClick (ToggleVisibility node.id) ] [ text node.title ]
             ]
-        , div [ class "children-area" ]
-            (List.map viewNode (getChildrenForNode node))
+        , elementIf node.isVisible
+            (div [ class "children-area" ]
+                (List.map (viewNode dragState) (getChildrenForNode node))
+            )
         ]
 
 
@@ -193,7 +233,7 @@ viewNodeImage attributes payload =
                 (List.append attributes
                     [ class "bullet-outer video-image"
                     , src ("https://i.ytimg.com/vi/" ++ id ++ "/default.jpg")
+                    , draggable "false"
                     ]
                 )
                 []
-
