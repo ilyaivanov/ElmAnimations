@@ -1,10 +1,10 @@
 module DragState exposing (..)
 
-import Debug exposing (log)
 import ExtraEvents exposing (MouseDownEvent, MouseMoveEvent, emptyElement)
 import Html exposing (Html, div)
-import Html.Attributes exposing (class, style)
-import Tree exposing (TreeItem, findNodeByYCoordinates)
+import Html.Attributes exposing (class, coords, style)
+import Ports
+import Tree exposing (TreeItem, hasId)
 
 
 rowHeight =
@@ -14,54 +14,18 @@ rowHeight =
 type DragState
     = NoDrag
     | PressedNotYetMoved MouseMoveEvent String Float
-    | DraggingSomething MouseMoveEvent String (Maybe DragOverInfo)
-
-
-type alias DragOverInfo =
-    { itemId : String
-    , verticalOffset : Int
-    , horizontalOffset : Int
-    }
+    | DraggingSomething MouseMoveEvent String
 
 
 type DragMsg
     = MouseUp
     | MouseMove MouseMoveEvent
     | MouseDown String MouseDownEvent
-    | MouseOver MouseMoveEvent String
-
-
-shouldListenToDragEvents : DragState -> Bool
-shouldListenToDragEvents dragState =
-    case dragState of
-        NoDrag ->
-            False
-
-        _ ->
-            True
 
 
 initialState : DragState
 initialState =
     NoDrag
-
-
-getNodeBeingDragged dragState =
-    case dragState of
-        DraggingSomething _ id _ ->
-            Just id
-
-        _ ->
-            Nothing
-
-
-getDraggingCoords dragState =
-    case dragState of
-        DraggingSomething event _ _ ->
-            Just event
-
-        _ ->
-            Nothing
 
 
 update : DragState -> DragMsg -> DragState
@@ -83,96 +47,137 @@ update state msg =
                     --makes much a better UX - we need to drag at least 3 pixels in order to count as drag
                     --otherwise this is considered a click (play if clicking on a card)
                     if newDistance > 5 then
-                        DraggingSomething newMousePosition id Nothing
+                        DraggingSomething newMousePosition id
 
                     else
                         PressedNotYetMoved newMousePosition id newDistance
 
-                DraggingSomething _ id info ->
-                    DraggingSomething newMousePosition id info
-
-        MouseOver _ itemId ->
-            case state of
-                DraggingSomething event id _ ->
-                    DraggingSomething event id (Just { itemId = itemId, horizontalOffset = event.layerX, verticalOffset = event.layerY })
-
-                _ ->
-                    state
+                DraggingSomething _ id ->
+                    DraggingSomething newMousePosition id
 
         MouseUp ->
             NoDrag
 
 
-isDraggingOverSecondHalf dragState =
-    case dragState of
-        DraggingSomething newMousePosition _ _ ->
-            remainderBy rowHeight newMousePosition.layerY > (rowHeight // 2)
+handleItemDrop model =
+    let
+        coordsMaybe =
+            getDraggingCoords model.dragState
+
+        nodeIdBeingDragged =
+            getNodeBeingDragged model.dragState |> Maybe.withDefault ""
+    in
+    case ( coordsMaybe, Tree.find (hasId nodeIdBeingDragged) model.nodes ) of
+        ( Just coords, Just nodeBeingDragged ) ->
+            let
+                dropIndicator =
+                    getDropIndicatorPosition model.nodes coords
+
+                nodeUpdater =
+                    case dropIndicator.dropPlacement of
+                        DropAfterNode ->
+                            Tree.insertAfterNode
+
+                        DropBeforeNode ->
+                            Tree.insertBeforeNode
+
+                        DropInsideNode ->
+                            Tree.insertAsFirstChild
+
+                nodes =
+                    model.nodes
+                        |> Tree.removeNode nodeIdBeingDragged
+                        |> nodeUpdater nodeBeingDragged dropIndicator.nodeUnder
+            in
+            ( { model
+                | dragState = update model.dragState MouseUp
+                , nodes = nodes
+              }
+            , Ports.sendEndDrag
+            )
 
         _ ->
-            False
+            ( { model | dragState = update model.dragState MouseUp }, Ports.sendEndDrag )
 
 
+type alias DropTargetInfo =
+    { x : Int, y : Int, nodeUnder : String, dropPlacement : DropPlacement }
 
---noinspection ElmUnusedSymbol
+
+type DropPlacement
+    = DropAfterNode
+    | DropBeforeNode
+    | DropInsideNode
+
+
+getDropIndicatorPosition : List TreeItem -> MouseMoveEvent -> DropTargetInfo
+getDropIndicatorPosition nodes mouseMoveEvent =
+    let
+        yPosition =
+            mouseMoveEvent.layerY
+
+        nodeUnder =
+            Tree.findNodeByYCoordinates (yPosition // rowHeight) nodes
+
+        nodeUnderLevel =
+            nodeUnder |> Maybe.map .level |> Maybe.withDefault 0
+
+        mouseLevel =
+            mouseMoveEvent.layerX // 31
+
+        isShownUnder =
+            nodeUnderLevel < mouseLevel
+
+        dropIndicatorLeftPosition =
+            if isShownUnder && isOnSecondHalf then
+                (nodeUnderLevel + 1) * 31
+
+            else
+                nodeUnderLevel * 31
+
+        dropPlacement =
+            if isShownUnder && isOnSecondHalf then
+                DropInsideNode
+
+            else if isOnSecondHalf then
+                DropAfterNode
+
+            else
+                DropBeforeNode
+
+        isOnSecondHalf =
+            remainderBy rowHeight yPosition > (rowHeight // 2)
+    in
+    { x = dropIndicatorLeftPosition
+    , nodeUnder = nodeUnder |> Maybe.map .id |> Maybe.withDefault ""
+    , dropPlacement = dropPlacement
+    , y =
+        yPosition
+            // rowHeight
+            * rowHeight
+            + (if isOnSecondHalf then
+                rowHeight
+
+               else
+                0
+              )
+    }
 
 
 viewDragIndicator : DragState -> List TreeItem -> Html msg
 viewDragIndicator dragState nodes =
-    case dragState of
-        DraggingSomething newMousePosition nodeBeingDragged _ ->
-            let
-                yPosition =
-                    newMousePosition.layerY
-
-                --This will be used to restrict drop-indicator position
-                nodeUnder =
-                    findNodeByYCoordinates (yPosition // rowHeight) nodes
-
-                nodeUnderLevel =
-                    nodeUnder |> Maybe.map .level |> Maybe.withDefault 0
-
-                mouseLevel =
-                    newMousePosition.layerX // 31
-
-                foo =
-                    log "node under level " ( nodeUnderLevel, mouseLevel )
-
-                isShownUnder =
-                    nodeUnderLevel < mouseLevel
-
-                dropIndicatorLeftPosition =
-                    if isShownUnder && isOnSecondHalf then
-                        (nodeUnderLevel + 1) * 31
-
-                    else
-                        nodeUnderLevel * 31
-
-                isOnSecondHalf =
-                    isDraggingOverSecondHalf dragState
-
-                nodesPosition =
-                    { x = newMousePosition.layerX // rowHeight * rowHeight
-                    , y =
-                        yPosition
-                            // rowHeight
-                            * rowHeight
-                            + (if isOnSecondHalf then
-                                rowHeight
-
-                               else
-                                0
-                              )
-                    }
-            in
+    let
+        viewDropIndicator dropPosition =
             div
                 [ class "drop-indicator"
-                , style "top" (String.fromInt nodesPosition.y ++ "px")
-                , style "left" (String.fromInt dropIndicatorLeftPosition ++ "px")
+                , style "top" (String.fromInt dropPosition.y ++ "px")
+                , style "left" (String.fromInt dropPosition.x ++ "px")
                 ]
                 []
-
-        _ ->
-            emptyElement
+    in
+    getDraggingCoords dragState
+        |> Maybe.map (viewDropIndicator << getDropIndicatorPosition nodes)
+        |> Maybe.withDefault emptyElement
 
 
 getDistance : MouseMoveEvent -> MouseMoveEvent -> Float
@@ -187,9 +192,37 @@ getDistance point1 point2 =
         )
 
 
+shouldListenToDragEvents : DragState -> Bool
+shouldListenToDragEvents dragState =
+    case dragState of
+        NoDrag ->
+            False
+
+        _ ->
+            True
+
+
+getNodeBeingDragged dragState =
+    case dragState of
+        DraggingSomething _ id ->
+            Just id
+
+        _ ->
+            Nothing
+
+
+getDraggingCoords dragState =
+    case dragState of
+        DraggingSomething event _ ->
+            Just event
+
+        _ ->
+            Nothing
+
+
 isDraggingNode dragState nodeId =
     case dragState of
-        DraggingSomething _ id _ ->
+        DraggingSomething _ id ->
             nodeId == id
 
         _ ->
@@ -198,7 +231,7 @@ isDraggingNode dragState nodeId =
 
 isDragging dragState =
     case dragState of
-        DraggingSomething _ _ _ ->
+        DraggingSomething _ _ ->
             True
 
         _ ->

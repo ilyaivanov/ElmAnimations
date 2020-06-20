@@ -1,13 +1,11 @@
 module Main exposing (..)
 
 import Browser
-import Debug exposing (log)
-import DragState exposing (DragState(..), rowHeight)
+import DragState exposing (DragState(..))
 import ExtraEvents exposing (MouseMoveEvent, attributeIf, classIf, elementIf, onMouseMove, onMouseUp)
 import Html exposing (Attribute, Html, div, img, span, text)
 import Html.Attributes exposing (class, draggable, src, style)
 import Html.Events exposing (onClick)
-import MaybeExtra
 import Ports
 import Tree exposing (NodePayload(..), TreeItem, getChildrenForNode, hasId, initialNodes)
 
@@ -66,47 +64,7 @@ update msg model =
             ( { model | nodes = Tree.removeNode nodeId model.nodes }, Cmd.none )
 
         DropItem ->
-            let
-                a =
-                    DragState.getDraggingCoords model.dragState
-
-                getCoord b =
-                    Tree.findNodeByYCoordinates (b.layerY // rowHeight) model.nodes
-
-                target =
-                    log "target" (a |> Maybe.map getCoord |> MaybeExtra.join |> Maybe.map .id |> Maybe.withDefault "")
-
-                nodeIdBeingDragged =
-                    DragState.getNodeBeingDragged model.dragState |> Maybe.withDefault ""
-
-                nodeBeingDragged =
-                    Tree.find (hasId nodeIdBeingDragged) model.nodes
-
-                insertNode =
-                    if DragState.isDraggingOverSecondHalf model.dragState then
-                        Tree.insertAfterNode
-
-                    else
-                        Tree.insertBeforeNode
-            in
-            case ( nodeBeingDragged, nodeIdBeingDragged /= target ) of
-                ( Just nodeBeingDraggedActual, True ) ->
-                    let
-                        nodes =
-                            model.nodes
-                                |> Tree.removeNode nodeIdBeingDragged
-                                |> insertNode nodeBeingDraggedActual target
-                    in
-                    ( { model
-                        | dragState = DragState.update model.dragState DragState.MouseUp
-                        , nodes = nodes
-                      }
-                    , Cmd.none
-                    )
-
-                _ ->
-                    ( { model | dragState = DragState.update model.dragState DragState.MouseUp }, Ports.sendEndDrag )
-
+           DragState.handleItemDrop model
         DndAction subMsg ->
             let
                 newDragState =
@@ -201,7 +159,7 @@ viewHeader model =
 viewNodeBeingDragged : Model -> Html Msg
 viewNodeBeingDragged model =
     case model.dragState of
-        DraggingSomething mousePosition itemId _ ->
+        DraggingSomething mousePosition itemId ->
             case Tree.find (hasId itemId) model.nodes of
                 Just node ->
                     div [ class "box-container" ]

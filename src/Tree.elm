@@ -87,8 +87,6 @@ removeNode nodeId nodes =
         |> List.map (mapChildren (removeNode nodeId))
 
 
-
-
 insertBeforeNode : TreeItem -> String -> List TreeItem -> List TreeItem
 insertBeforeNode nodeToInsert beforeItemId nodes =
     nodes
@@ -101,6 +99,22 @@ insertAfterNode nodeToInsert beforeItemId nodes =
     nodes
         |> insert (inserterAfter nodeToInsert) beforeItemId
         |> List.map (mapChildren (insertAfterNode nodeToInsert beforeItemId))
+
+
+insertAsFirstChild : TreeItem -> String -> List TreeItem -> List TreeItem
+insertAsFirstChild nodeToInsert parentItemId nodes =
+    nodes
+        |> List.map (placeAsChild parentItemId nodeToInsert)
+        |> List.map (mapChildren (insertAsFirstChild nodeToInsert parentItemId))
+
+
+placeAsChild : String -> TreeItem -> TreeItem -> TreeItem
+placeAsChild nodeId childNode node =
+    if node.id == nodeId then
+        { node | children = Just (Children (childNode :: getChildrenForNode node)) }
+
+    else
+        node
 
 
 inserterAfter newItem currentItem =
@@ -125,8 +139,6 @@ insert inserter beforeItemId items =
 
     else
         items
-
-
 
 
 getNodesFlattenedWithLevels : List TreeItem -> List TreeItem
