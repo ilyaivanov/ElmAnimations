@@ -68,7 +68,7 @@ body {
     /*120x90, thus width is 1.33333 bigger than height*/
     height: 25px;
     width: calc(25px * 1.33333);
-    margin-left: 0px;
+    margin-left: 0;
     border-radius: 4px;
 }
 
@@ -87,6 +87,24 @@ body {
 
 .clickable-text:hover {
     text-decoration: underline;
+}
+
+.row-title:hover .row-icons {
+    visibility: visible;
+}
+
+.row-icons {
+    visibility: hidden;
+}
+
+.row-icon {
+    margin-left: 10px;
+    color: red;
+    cursor: pointer;
+}
+
+.row-icon:hover {
+    font-weight: bold;
 }
 
 
@@ -127,7 +145,7 @@ body {
     position: absolute;
     width: 100%;
     top: 50px;
-    left: 0px;
+    left: 0;
     height: 4px;
     transform: translateY(-2px);
     background-color: darkgrey;

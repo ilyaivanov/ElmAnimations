@@ -1,7 +1,5 @@
 module Tree exposing (..)
 
-import Debug exposing (log)
-
 
 type alias TreeItem =
     { id : String
@@ -21,6 +19,16 @@ getChildren subs =
     case subs of
         Children items ->
             items
+
+
+mapChildren : (List TreeItem -> List TreeItem) -> TreeItem -> TreeItem
+mapChildren mapper node =
+    case node.children of
+        Just subs ->
+            { node | children = Just (Children (mapper (getChildren subs))) }
+
+        Nothing ->
+            node
 
 
 getChildrenForNode : TreeItem -> List TreeItem
@@ -70,6 +78,55 @@ hasChild id node =
 
         Nothing ->
             False
+
+
+removeNode : String -> List TreeItem -> List TreeItem
+removeNode nodeId nodes =
+    nodes
+        |> List.filter (hasNotId nodeId)
+        |> List.map (mapChildren (removeNode nodeId))
+
+
+
+
+insertBeforeNode : TreeItem -> String -> List TreeItem -> List TreeItem
+insertBeforeNode nodeToInsert beforeItemId nodes =
+    nodes
+        |> insert (inserterBefore nodeToInsert) beforeItemId
+        |> List.map (mapChildren (insertBeforeNode nodeToInsert beforeItemId))
+
+
+insertAfterNode : TreeItem -> String -> List TreeItem -> List TreeItem
+insertAfterNode nodeToInsert beforeItemId nodes =
+    nodes
+        |> insert (inserterAfter nodeToInsert) beforeItemId
+        |> List.map (mapChildren (insertAfterNode nodeToInsert beforeItemId))
+
+
+inserterAfter newItem currentItem =
+    [ currentItem, newItem ]
+
+
+inserterBefore newItem currentItem =
+    [ newItem, currentItem ]
+
+
+insert inserter beforeItemId items =
+    if List.any (hasId beforeItemId) items then
+        let
+            placeBefore item =
+                if item.id == beforeItemId then
+                    inserter item
+
+                else
+                    [ item ]
+        in
+        items |> List.map placeBefore |> List.concat
+
+    else
+        items
+
+
 
 
 getNodesFlattenedWithLevels : List TreeItem -> List TreeItem
@@ -243,3 +300,7 @@ leafItemWithYoutube id title videoId =
 
 hasId itemId node =
     node.id == itemId
+
+
+hasNotId itemId node =
+    node.id /= itemId

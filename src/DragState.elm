@@ -54,18 +54,9 @@ getNodeBeingDragged dragState =
             Nothing
 
 
-getNodeBeingDraggedOver dragState =
-    case dragState of
-        DraggingSomething _ _ idMaybe ->
-            idMaybe |> Maybe.map .itemId
-
-        _ ->
-            Nothing
-
-
 getDraggingCoords dragState =
     case dragState of
-        DraggingSomething event _ idMaybe ->
+        DraggingSomething event _ _ ->
             Just event
 
         _ ->
@@ -111,14 +102,17 @@ update state msg =
             NoDrag
 
 
-type Placement
-    = PlaceBefore String
-    | PlaceAfter String
 
-handlePlacement: List TreeItem -> DragState -> List TreeItem
-handlePlacement nodes dragState =
-    nodes
+isDraggingOverSecondHalf dragState =
+    case dragState of
+        DraggingSomething newMousePosition _ _ ->
+            remainderBy rowHeight newMousePosition.layerY > (rowHeight // 2)
 
+        _ ->
+            False
+
+
+--noinspection ElmUnusedSymbol
 viewDragIndicator : DragState -> List TreeItem -> Html msg
 viewDragIndicator dragState nodes =
     case dragState of
@@ -132,7 +126,7 @@ viewDragIndicator dragState nodes =
                     findNodeByYCoordinates (yPosition // rowHeight) nodes
 
                 isOnSecondHalf =
-                    remainderBy rowHeight yPosition > (rowHeight // 2)
+                    isDraggingOverSecondHalf dragState
 
                 nodesPosition =
                     { x = newMousePosition.layerX // rowHeight * rowHeight

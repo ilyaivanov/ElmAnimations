@@ -9,6 +9,7 @@
     <title>Elm Animations</title>
     <link rel="stylesheet" href="/style.css?v=0.1"/>
     <script type="text/javascript" src="/elm.js?v=0.1"></script>
+    <script type="text/javascript" src="/ports.js?v=0.1"></script>
 </head>
 <body>
 <div id="elm-node">
@@ -19,6 +20,8 @@
   var app = Elm.Main.init({
     node: document.getElementById("elm-node"),
   });
+
+  registerDragPorts(app.ports)
 </script>
 
 </body>

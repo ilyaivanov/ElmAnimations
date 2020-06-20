@@ -8,6 +8,7 @@ import Html exposing (Attribute, Html, div, img, span, text)
 import Html.Attributes exposing (class, draggable, src, style)
 import Html.Events exposing (onClick)
 import MaybeExtra
+import Ports
 import Tree exposing (NodePayload(..), TreeItem, getChildrenForNode, hasId, initialNodes)
 
 
@@ -46,6 +47,7 @@ type Msg
     = ToggleVisibility String
     | SetFocus String
     | RemoveFocus
+    | RemoveNode String
     | DndAction DragState.DragMsg
     | DropItem
     | None
@@ -60,6 +62,9 @@ update msg model =
         RemoveFocus ->
             ( { model | focus = Root }, Cmd.none )
 
+        RemoveNode nodeId ->
+            ( { model | nodes = Tree.removeNode nodeId model.nodes }, Cmd.none )
+
         DropItem ->
             let
                 a =
@@ -68,18 +73,56 @@ update msg model =
                 getCoord b =
                     Tree.findNodeByYCoordinates (b.layerY // rowHeight) model.nodes
 
-                foo =
-                    log "drop" (a |> Maybe.map getCoord |> MaybeExtra.join |> Maybe.map .title)
+                target =
+                    log "target" (a |> Maybe.map getCoord |> MaybeExtra.join |> Maybe.map .id |> Maybe.withDefault "")
+
+                nodeIdBeingDragged =
+                    DragState.getNodeBeingDragged model.dragState |> Maybe.withDefault ""
+
+                nodeBeingDragged =
+                    Tree.find (hasId nodeIdBeingDragged) model.nodes
+
+                insertNode =
+                    if DragState.isDraggingOverSecondHalf model.dragState then
+                        Tree.insertAfterNode
+
+                    else
+                        Tree.insertBeforeNode
             in
-            ( { model
-                | dragState = DragState.update model.dragState DragState.MouseUp
-                , nodes = DragState.handlePlacement model.nodes model.dragState
-              }
-            , Cmd.none
-            )
+            case ( nodeBeingDragged, nodeIdBeingDragged /= target ) of
+                ( Just nodeBeingDraggedActual, True ) ->
+                    let
+                        nodes =
+                            model.nodes
+                                |> Tree.removeNode nodeIdBeingDragged
+                                |> insertNode nodeBeingDraggedActual target
+                    in
+                    ( { model
+                        | dragState = DragState.update model.dragState DragState.MouseUp
+                        , nodes = nodes
+                      }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( { model | dragState = DragState.update model.dragState DragState.MouseUp }, Ports.sendEndDrag )
 
         DndAction subMsg ->
-            ( { model | dragState = DragState.update model.dragState subMsg }, Cmd.none )
+            let
+                newDragState =
+                    DragState.update model.dragState subMsg
+
+                haStartedToDrag =
+                    DragState.isDragging newDragState && not (DragState.isDragging model.dragState)
+
+                cmd =
+                    if haStartedToDrag then
+                        Ports.sendStartDrag
+
+                    else
+                        Cmd.none
+            in
+            ( { model | dragState = newDragState }, cmd )
 
         ToggleVisibility id ->
             let
@@ -210,6 +253,10 @@ viewNode dragState node =
                 ]
                 node.payload
             , div [ onClick (ToggleVisibility node.id) ] [ text node.title ]
+            , div [ class "row-icons" ]
+                [ span [ class "row-icon" ] [ text "E" ]
+                , span [ class "row-icon", onClick (RemoveNode node.id) ] [ text "X" ]
+                ]
             ]
         , elementIf node.isVisible
             (div [ class "children-area" ]
