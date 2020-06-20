@@ -1,5 +1,6 @@
 module DragState exposing (..)
 
+import Debug exposing (log)
 import ExtraEvents exposing (MouseDownEvent, MouseMoveEvent, emptyElement)
 import Html exposing (Html, div)
 import Html.Attributes exposing (class, style)
@@ -102,7 +103,6 @@ update state msg =
             NoDrag
 
 
-
 isDraggingOverSecondHalf dragState =
     case dragState of
         DraggingSomething newMousePosition _ _ ->
@@ -112,7 +112,10 @@ isDraggingOverSecondHalf dragState =
             False
 
 
+
 --noinspection ElmUnusedSymbol
+
+
 viewDragIndicator : DragState -> List TreeItem -> Html msg
 viewDragIndicator dragState nodes =
     case dragState of
@@ -124,6 +127,25 @@ viewDragIndicator dragState nodes =
                 --This will be used to restrict drop-indicator position
                 nodeUnder =
                     findNodeByYCoordinates (yPosition // rowHeight) nodes
+
+                nodeUnderLevel =
+                    nodeUnder |> Maybe.map .level |> Maybe.withDefault 0
+
+                mouseLevel =
+                    newMousePosition.layerX // 31
+
+                foo =
+                    log "node under level " ( nodeUnderLevel, mouseLevel )
+
+                isShownUnder =
+                    nodeUnderLevel < mouseLevel
+
+                dropIndicatorLeftPosition =
+                    if isShownUnder && isOnSecondHalf then
+                        (nodeUnderLevel + 1) * 31
+
+                    else
+                        nodeUnderLevel * 31
 
                 isOnSecondHalf =
                     isDraggingOverSecondHalf dragState
@@ -145,6 +167,7 @@ viewDragIndicator dragState nodes =
             div
                 [ class "drop-indicator"
                 , style "top" (String.fromInt nodesPosition.y ++ "px")
+                , style "left" (String.fromInt dropIndicatorLeftPosition ++ "px")
                 ]
                 []
 
