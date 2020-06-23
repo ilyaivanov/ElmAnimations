@@ -1,4 +1,4 @@
-port module Main exposing (..)
+module Main exposing (..)
 
 import Browser
 import DragState exposing (DragState(..))
@@ -46,18 +46,10 @@ init _ =
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
-        [ onWindowKeyUp mapLoadedBoards
-        , gotNewId AddNewNode
+        [ Ports.onWindowKeyUp mapLoadedBoards
+        , Ports.gotNewId AddNewNode
         ]
 
-
-port onWindowKeyUp : (Json.Value -> msg) -> Sub msg
-
-
-port gotNewId : (String -> msg) -> Sub msg
-
-
-port generateNewId : () -> Cmd msg
 
 
 mapLoadedBoards : Json.Value -> Msg
@@ -189,7 +181,7 @@ update msg model =
                     ( model, Cmd.none )
 
         AddNewNodeClicked ->
-            ( model, generateNewId () )
+            ( model, Ports.requestNewId )
 
         AddNewNode newId ->
             let
