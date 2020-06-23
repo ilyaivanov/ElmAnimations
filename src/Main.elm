@@ -1,11 +1,12 @@
-module Main exposing (..)
+port module Main exposing (..)
 
 import Browser
 import DragState exposing (DragState(..))
 import ExtraEvents exposing (MouseMoveEvent, attributeIf, classIf, elementIf, onMouseMove, onMouseUp)
-import Html exposing (Attribute, Html, div, img, span, text)
-import Html.Attributes exposing (class, draggable, src, style)
-import Html.Events exposing (onClick)
+import Html exposing (Attribute, Html, button, div, img, input, span, text)
+import Html.Attributes exposing ( class, draggable, id, src, style, value)
+import Html.Events exposing (onBlur, onClick, onInput)
+import Json.Decode as Json
 import Ports
 import Tree exposing (NodePayload(..), TreeItem, getChildrenForNode, hasId, initialNodes)
 
@@ -18,6 +19,7 @@ type alias Model =
     { nodes : List TreeItem
     , focus : Focus
     , dragState : DragState.DragState
+    , nodeBeingEdited : Maybe EditedNodeState
     }
 
 
@@ -26,11 +28,16 @@ type Focus
     | Node String
 
 
+type alias EditedNodeState =
+    { id : String, text : String }
+
+
 init : () -> ( Model, Cmd Msg )
 init _ =
     ( { nodes = initialNodes
       , focus = Root
       , dragState = DragState.initialState
+      , nodeBeingEdited = Nothing
       }
     , Cmd.none
     )
@@ -38,7 +45,35 @@ init _ =
 
 subscriptions : Model -> Sub Msg
 subscriptions _ =
-    Sub.none
+    Sub.batch
+        [ onWindowKeyUp mapLoadedBoards
+        , gotNewId AddNewNode
+        ]
+
+
+port onWindowKeyUp : (Json.Value -> msg) -> Sub msg
+
+
+port gotNewId : (String -> msg) -> Sub msg
+
+
+port generateNewId : () -> Cmd msg
+
+
+mapLoadedBoards : Json.Value -> Msg
+mapLoadedBoards modelJson =
+    case Json.decodeValue decodeBoard modelJson of
+        Ok model ->
+            OnKeyPressed model
+
+        Err _ ->
+            None
+
+
+decodeBoard : Json.Decoder KeyPressedEvent
+decodeBoard =
+    Json.map KeyPressedEvent
+        (Json.field "key" Json.string)
 
 
 type Msg
@@ -46,9 +81,20 @@ type Msg
     | SetFocus String
     | RemoveFocus
     | RemoveNode String
+    | AddNewNodeClicked
+    | AddNewNode String
     | DndAction DragState.DragMsg
     | DropItem
+    | EditNode String
+    | SetEditText String
+    | CompleteEdit
+    | RevertEdit
+    | OnKeyPressed KeyPressedEvent
     | None
+
+
+type alias KeyPressedEvent =
+    { key : String }
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -64,7 +110,45 @@ update msg model =
             ( { model | nodes = Tree.removeNode nodeId model.nodes }, Cmd.none )
 
         DropItem ->
-           DragState.handleItemDrop model
+            DragState.handleItemDrop model
+
+        EditNode nodeId ->
+            let
+                text =
+                    Tree.find (hasId nodeId) model.nodes |> Maybe.map .title |> Maybe.withDefault ""
+            in
+            ( { model | nodeBeingEdited = Just { id = nodeId, text = text } }, Ports.onEditStart nodeId )
+
+        SetEditText newText ->
+            let
+                updateText node =
+                    { node | text = newText }
+
+                newEditState =
+                    model.nodeBeingEdited |> Maybe.map updateText
+            in
+            ( { model | nodeBeingEdited = newEditState }, Cmd.none )
+
+        CompleteEdit ->
+            let
+                newText =
+                    model.nodeBeingEdited |> Maybe.map .text |> Maybe.withDefault ""
+
+                newId =
+                    model.nodeBeingEdited |> Maybe.map .id |> Maybe.withDefault ""
+
+                setText item =
+                    if item.id == newId then
+                        { item | title = newText }
+
+                    else
+                        item
+            in
+            ( { model | nodeBeingEdited = Nothing, nodes = Tree.mapAllNodes setText model.nodes }, Cmd.none )
+
+        RevertEdit ->
+            ( { model | nodeBeingEdited = Nothing }, Cmd.none )
+
         DndAction subMsg ->
             let
                 newDragState =
@@ -93,6 +177,27 @@ update msg model =
             in
             ( { model | nodes = Tree.mapAllNodes toggleVisibility model.nodes }, Cmd.none )
 
+        OnKeyPressed event ->
+            case event.key of
+                "Escape" ->
+                    update RevertEdit model
+
+                "Enter" ->
+                    update CompleteEdit model
+
+                _ ->
+                    ( model, Cmd.none )
+
+        AddNewNodeClicked ->
+            ( model, generateNewId () )
+
+        AddNewNode newId ->
+            let
+                nodes =
+                    List.append model.nodes [ Tree.createNewNode newId ]
+            in
+            ( { model | nodes = nodes }, Cmd.none )
+
         None ->
             ( model, Cmd.none )
 
@@ -113,6 +218,7 @@ view model =
         , viewSample model
         , DragState.viewDragIndicator model.dragState model.nodes
         , viewNodeBeingDragged model
+        , button [ onClick AddNewNodeClicked ] [ text "Add" ]
         ]
 
 
@@ -194,15 +300,15 @@ viewSample model =
             div
                 []
                 [ div [ class "focused-element" ] [ text node.title ]
-                , div [] (List.map (viewNode model.dragState) (getChildrenForNode node))
+                , div [] (List.map (viewNode model.dragState model.nodeBeingEdited) (getChildrenForNode node))
                 ]
 
         Nothing ->
-            div [] (List.map (viewNode model.dragState) model.nodes)
+            div [] (List.map (viewNode model.dragState model.nodeBeingEdited) model.nodes)
 
 
-viewNode : DragState -> TreeItem -> Html Msg
-viewNode dragState node =
+viewNode : DragState -> Maybe EditedNodeState -> TreeItem -> Html Msg
+viewNode dragState nodeEditedState node =
     div [ class "row" ]
         [ div [ class "row-title" ]
             [ viewNodeImage
@@ -210,17 +316,39 @@ viewNode dragState node =
                 , ExtraEvents.onMouseDown (\n -> DndAction (DragState.MouseDown node.id n))
                 ]
                 node.payload
-            , div [ onClick (ToggleVisibility node.id) ] [ text node.title ]
+            , viewText nodeEditedState node
             , div [ class "row-icons" ]
-                [ span [ class "row-icon" ] [ text "E" ]
+                [ span [ class "row-icon", onClick (EditNode node.id) ] [ text "E" ]
                 , span [ class "row-icon", onClick (RemoveNode node.id) ] [ text "X" ]
                 ]
             ]
         , elementIf node.isVisible
             (div [ class "children-area" ]
-                (List.map (viewNode dragState) (getChildrenForNode node))
+                (List.map (viewNode dragState nodeEditedState) (getChildrenForNode node))
             )
         ]
+
+
+viewText nodeEditedState node =
+    let
+        nodeId =
+            nodeEditedState |> Maybe.map .id |> Maybe.withDefault ""
+
+        nodeText =
+            nodeEditedState |> Maybe.map .text |> Maybe.withDefault ""
+    in
+    if nodeId == node.id then
+        input
+            [ id ("input" ++ nodeId)
+            , class "row-title-input"
+            , onInput SetEditText
+            , onBlur CompleteEdit
+            , value nodeText
+            ]
+            []
+
+    else
+        div [ class "row-title-text", onClick (ToggleVisibility node.id) ] [ text node.title ]
 
 
 viewNodeImage attributes payload =

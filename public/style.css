@@ -46,6 +46,17 @@ body {
     display: flex;
     align-items: center;
     height: 35px;
+    /* margin-left: 2px; */
+}
+
+.row-title-text {
+    margin-left: 4px;
+}
+
+.row-title-input {
+    width: 600px;
+    font-family: inherit;
+    font-size: inherit;
 }
 
 .children-area {

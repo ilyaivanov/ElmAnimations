@@ -21,6 +21,11 @@ getChildren subs =
             items
 
 
+createNewNode : String -> TreeItem
+createNewNode id =
+    { id = id, title = "New Node", isVisible = True, level = 0, payload = Playlist, children = Just (Children []) }
+
+
 mapChildren : (List TreeItem -> List TreeItem) -> TreeItem -> TreeItem
 mapChildren mapper node =
     case node.children of
