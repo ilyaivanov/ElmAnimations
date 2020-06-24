@@ -6,8 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
     <meta name="theme-color" content="#000000"/>
     <meta name="description" content="Organize your videos like a boss"/>
-    <title>Elm Animations</title>
-    <link rel="stylesheet" href="/style.css?v=0.1"/>
+    <title>Grenfield</title>
+    <link rel="stylesheet" href="/newUiStyle.css?v=0.1"/>
     <script type="text/javascript" src="/elm.js?v=0.1"></script>
     <script type="text/javascript" src="/focusPorts.js?v=0.1"></script>
     <script type="text/javascript" src="/firebasePorts.js?v=0.1"></script>
@@ -19,13 +19,13 @@
 </div>
 <noscript>You need to enable JavaScript to run this app.</noscript>
 <script>
-  var app = Elm.Main.init({
+  var app = Elm.NewUi.init({
     node: document.getElementById("elm-node"),
   });
 
-  registerDragPorts(app.ports);
-  registerFocusPorts(app.ports);
-  registerFirebasePorts(app.ports);
+  // registerDragPorts(app.ports);
+  // registerFocusPorts(app.ports);
+  // registerFirebasePorts(app.ports);
 </script>
 
 </body>
