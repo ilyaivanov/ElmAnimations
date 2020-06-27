@@ -12,6 +12,7 @@
     <script type="text/javascript" src="/focusPorts.js?v=0.1"></script>
     <script type="text/javascript" src="/firebasePorts.js?v=0.1"></script>
     <script type="text/javascript" src="/scrollPorts.js?v=0.1"></script>
+    <script type="text/javascript" src="/newUiPorts.js?v=0.1"></script>
 </head>
 <body>
 <div id="elm-node">
@@ -23,6 +24,7 @@
     node: document.getElementById("elm-node"),
   });
 
+  registerNewUIPorts(app.ports);
   // registerDragPorts(app.ports);
   // registerFocusPorts(app.ports);
   // registerFirebasePorts(app.ports);

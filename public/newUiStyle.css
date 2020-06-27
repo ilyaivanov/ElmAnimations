@@ -28,6 +28,9 @@ body {
     height: var(--branch-bubble-width);
     border-radius: var(--branch-bubble-width);
     background-color: #E1E4E8;
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
 
 .node-title {
@@ -82,4 +85,8 @@ body {
     width: 80px;
     flex-direction: column;
     justify-content: stretch;
+}
+
+.page{
+    transition: all 0.2s linear;
 }

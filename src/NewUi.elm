@@ -1,8 +1,11 @@
 module NewUi exposing (..)
 
 import Browser
+import ExtraEvents exposing (classIf)
 import Html exposing (Attribute, Html, button, div, img, text)
-import Html.Attributes exposing (class, src)
+import Html.Attributes exposing (class, src, style)
+import Html.Events exposing (onClick)
+import Ports
 
 
 main =
@@ -10,13 +13,15 @@ main =
 
 
 type alias Model =
-    { foo : Int
+    { isDeepHouseVisible : Bool
+    , focused : FocusedNode
     }
 
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( { foo = 12
+    ( { isDeepHouseVisible = True
+      , focused = NoNode
       }
     , Cmd.none
     )
@@ -28,47 +33,97 @@ subscriptions _ =
 
 
 type Msg
-    = None
+    = Focus FocusedNode
+    | None
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        Focus focus ->
+            ( { model | focused = focus }, Ports.scrollToTop () )
+
         None ->
             ( model, Cmd.none )
 
 
+type FocusedNode
+    = NoNode
+    | DarkHouse
+    | NestedDarkHouse
+
+
 view : Model -> Html Msg
-view _ =
-    div [ class "children" ]
-        [ rowTitle "Ambient"
-        , div [ class "children" ]
-            [ rowTitle "Deep house"
+view model =
+    let
+        ( top, left ) =
+            case model.focused of
+                NoNode ->
+                    ( "0", "0" )
+
+                DarkHouse ->
+                    ( "-300px", "-50px" )
+
+                NestedDarkHouse ->
+                    ( "-800px", "-75px" )
+    in
+    div [ class "page", style "margin-top" top, style "margin-left" left ]
+        [ div [ class "children" ]
+            [ rowTitle "Ambient"
             , div [ class "children" ]
-                [ div []
-                    [ rowTitle "Deep house"
-                    , rowTitle "Dark house"
-                    , videoTitle "Video"
-                    , rowTitle "Deep true dark house"
+                [ rowTitle "Deeply house"
+                , div [ class "children" ]
+                    [ div []
+                        [ rowTitle "Deep house"
+                        , rowTitle "Dark house"
+                        , videoTitle "Video"
+                        , rowTitle "Deep true dark house"
+                        ]
                     ]
+                , rowTitle "Dark house"
+                , div [ class "children" ]
+                    [ videoTitle "Video"
+                    , videoTitle "Video"
+                    , videoTitle "Video"
+                    , videoTitle "Video"
+                    , videoTitle "Video"
+                    , videoTitle "Video"
+                    , videoTitle "Video"
+                    , videoTitle "Video"
+                    , rowTitle "Nested Dark house"
+                    , div [ class "children" ]
+                        [ videoTitle "Video"
+                        , videoTitle "Video"
+                        , videoTitle "Video"
+                        , videoTitle "Video"
+                        , videoTitle "Video"
+                        , videoTitle "Video"
+                        , videoTitle "Video"
+                        , videoTitle "Video"
+                        ]
+                    ]
+                , rowTitle "Deep true dark house"
+                , rowTitle "Deep true dark house"
+                , rowTitle "Deep true dark house"
+                , rowTitle "Deep true dark house"
+                , rowTitle "Deep true dark house"
+                , rowTitle "Deep true dark house"
                 ]
-            , rowTitle "Dark house"
-            , rowTitle "Deep true dark house"
+            , viewButtons
             ]
-        , viewButtons
         ]
 
 
 rowTitle title =
-    node title playlistIcon
+    node title playlistIcon False
 
 
 videoTitle title =
-    node title videoIcon
+    node title videoIcon False
 
 
-node title iconElement =
-    div [ class "node-title" ]
+node title iconElement isHidden =
+    div [ class "node-title", classIf isHidden "hidden" ]
         [ div [ class "branch" ] []
         , div [ class "branch-bubble" ] []
         , iconElement
@@ -87,8 +142,8 @@ playlistIcon =
 
 viewButtons =
     div [ class "buttons" ]
-        [ button [] [ text "Swap" ]
-        , button [] [ text "Focus" ]
-        , button [] [ text "Add" ]
-        , button [] [ text "Remove" ]
+        [ text "Focus"
+        , button [ onClick (Focus NoNode) ] [ text "Root" ]
+        , button [ onClick (Focus DarkHouse) ] [ text "Dark house" ]
+        , button [ onClick (Focus NestedDarkHouse) ] [ text "Nested Dark house" ]
         ]

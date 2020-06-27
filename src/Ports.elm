@@ -31,3 +31,6 @@ sendStartDrag =
 
 sendEndDrag =
     endDrag ()
+
+
+port scrollToTop : () -> Cmd msg
