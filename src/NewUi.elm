@@ -2,10 +2,8 @@ module NewUi exposing (..)
 
 import Browser
 import ExtraEvents exposing (classIf)
-import Html exposing (Attribute, Html, button, div, img, text)
-import Html.Attributes exposing (class, src, style)
-import Html.Events exposing (onClick)
-import Ports
+import Html exposing (Attribute, Html, div, img, input, text)
+import Html.Attributes exposing (class, placeholder, src)
 
 
 main =
@@ -13,15 +11,13 @@ main =
 
 
 type alias Model =
-    { isDeepHouseVisible : Bool
-    , focused : FocusedNode
+    { foo : Int
     }
 
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( { isDeepHouseVisible = True
-      , focused = NoNode
+    ( { foo = 1
       }
     , Cmd.none
     )
@@ -33,54 +29,62 @@ subscriptions _ =
 
 
 type Msg
-    = Focus FocusedNode
-    | None
+    = None
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        Focus focus ->
-            ( { model | focused = focus }, Ports.scrollToTop () )
-
         None ->
             ( model, Cmd.none )
 
 
-type FocusedNode
-    = NoNode
-    | DarkHouse
-    | NestedDarkHouse
-
-
 view : Model -> Html Msg
 view model =
-    let
-        ( top, left ) =
-            case model.focused of
-                NoNode ->
-                    ( "0", "0" )
+    div [ class "page" ]
+        [ viewSidebar, viewTree, viewSearch ]
 
-                DarkHouse ->
-                    ( "-300px", "-50px" )
 
-                NestedDarkHouse ->
-                    ( "-800px", "-75px" )
-    in
-    div [ class "page", style "margin-top" top, style "margin-left" left ]
-        [ div [ class "children" ]
-            [ rowTitle "Ambient"
+viewSidebar =
+    div [ class "sidebar" ] [ text "Sidebar" ]
+
+
+viewSearch =
+    div [ class "search" ]
+        [  input [placeholder "Search for videos, channels", class "search-input"] []
+        , tree
+        ]
+
+
+viewTree =
+    div [ class "tree" ]
+        [ tree ]
+
+
+tree =
+    div [ class "children" ]
+        [ rowTitle "Ambient"
+        , div [ class "children" ]
+            [ rowTitle "Deeply house"
             , div [ class "children" ]
-                [ rowTitle "Deeply house"
-                , div [ class "children" ]
-                    [ div []
-                        [ rowTitle "Deep house"
-                        , rowTitle "Dark house"
-                        , videoTitle "Video"
-                        , rowTitle "Deep true dark house"
-                        ]
+                [ div []
+                    [ rowTitle "Deep house"
+                    , rowTitle "Dark house"
+                    , videoTitle "Video"
+                    , rowTitle "Deep true dark house"
                     ]
-                , rowTitle "Dark house"
+                ]
+            , rowTitle "Dark house"
+            , div [ class "children" ]
+                [ videoTitle "Video"
+                , videoTitle "Video"
+                , videoTitle "Video"
+                , videoTitle "Video"
+                , videoTitle "Video"
+                , videoTitle "Video"
+                , videoTitle "Video"
+                , videoTitle "Video"
+                , rowTitle "Nested Dark house"
                 , div [ class "children" ]
                     [ videoTitle "Video"
                     , videoTitle "Video"
@@ -90,26 +94,14 @@ view model =
                     , videoTitle "Video"
                     , videoTitle "Video"
                     , videoTitle "Video"
-                    , rowTitle "Nested Dark house"
-                    , div [ class "children" ]
-                        [ videoTitle "Video"
-                        , videoTitle "Video"
-                        , videoTitle "Video"
-                        , videoTitle "Video"
-                        , videoTitle "Video"
-                        , videoTitle "Video"
-                        , videoTitle "Video"
-                        , videoTitle "Video"
-                        ]
                     ]
-                , rowTitle "Deep true dark house"
-                , rowTitle "Deep true dark house"
-                , rowTitle "Deep true dark house"
-                , rowTitle "Deep true dark house"
-                , rowTitle "Deep true dark house"
-                , rowTitle "Deep true dark house"
                 ]
-            , viewButtons
+            , rowTitle "Deep true dark house"
+            , rowTitle "Deep true dark house"
+            , rowTitle "Deep true dark house"
+            , rowTitle "Deep true dark house"
+            , rowTitle "Deep true dark house"
+            , rowTitle "Deep true dark house"
             ]
         ]
 
@@ -138,12 +130,3 @@ videoIcon =
 
 playlistIcon =
     div [ class "circle" ] []
-
-
-viewButtons =
-    div [ class "buttons" ]
-        [ text "Focus"
-        , button [ onClick (Focus NoNode) ] [ text "Root" ]
-        , button [ onClick (Focus DarkHouse) ] [ text "Dark house" ]
-        , button [ onClick (Focus NestedDarkHouse) ] [ text "Nested Dark house" ]
-        ]
