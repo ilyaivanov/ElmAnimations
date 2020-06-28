@@ -1,4 +1,4 @@
-module NewUi exposing (..)
+module NewUi exposing (main)
 
 import Assets
 import Browser
@@ -125,11 +125,11 @@ viewHeader model =
             focusedNode =
                 findById model.focusedNodeId model.tree |> Maybe.map .title |> Maybe.withDefault ""
         in
-        div [class "header"]
+        div [ class "header" ]
             (parents
                 |> List.map viewHeaderPart
                 |> List.concat
-                |> (flip List.append) [ viewFocusedHeaderPart focusedNode ]
+                |> flip List.append [ viewFocusedHeaderPart focusedNode ]
             )
 
 
@@ -157,10 +157,10 @@ viewHomeNode model n =
         title =
             case n.payload of
                 Playlist ->
-                    rowTitle n.title
+                    node n.title (playlistIcon n)
 
                 Video info ->
-                    videoTitle n.title info
+                    node n.title (videoIcon info.videoId)
     in
     div []
         [ title
@@ -170,14 +170,6 @@ viewHomeNode model n =
           else
             emptyElement
         ]
-
-
-rowTitle title =
-    node title playlistIcon
-
-
-videoTitle title info =
-    node title (videoIcon info.videoId)
 
 
 node title iconElement =
@@ -194,8 +186,8 @@ videoIcon videoId =
     img [ src ("https://i.ytimg.com/vi/" ++ videoId ++ "/mqdefault.jpg"), class "image" ] []
 
 
-playlistIcon =
-    div [ class "circle" ] []
+playlistIcon n =
+    div [ class "circle", onClick (Focus n.id) ] []
 
 
 
@@ -299,11 +291,7 @@ findById id tree =
 
 toggleVisibility : HashTree -> String -> HashTree
 toggleVisibility hash id =
-    let
-        itemM =
-            Dict.get id hash
-    in
-    case itemM of
+    case Dict.get id hash of
         Just item ->
             Dict.insert id { item | isVisible = not item.isVisible } hash
 
@@ -331,4 +319,3 @@ flip func a b =
 filterOutNothing : List (Maybe a) -> List a
 filterOutNothing maybes =
     List.filterMap identity maybes
-

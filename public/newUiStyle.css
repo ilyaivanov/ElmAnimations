@@ -11,6 +11,11 @@ body {
     height: var(--cicle-size);
     border-radius: 45px;
     background-color: #28A745;
+    cursor: pointer;
+}
+
+.circle:hover{
+    background-color: #aabadb;
 }
 
 .branch {
@@ -135,8 +140,8 @@ body {
     flex-direction: row;
     align-items: center;
     cursor: pointer;
-    border-bottom-left-radius: 50px;
-    border-top-left-radius: 50px;
+    margin-left: -500px;
+    padding-left: 500px;
 }
 
 
