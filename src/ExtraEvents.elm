@@ -97,7 +97,7 @@ onKeyUp tagger =
 
 onClickAlwaysStopPropagation : msg -> Attribute msg
 onClickAlwaysStopPropagation msg =
-    stopPropagationOn "mousedown" (Json.map alwaysStop (Json.succeed msg))
+    stopPropagationOn "click" (Json.map alwaysStop (Json.succeed msg))
 
 
 alwaysStop x =

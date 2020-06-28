@@ -2,9 +2,8 @@ module NewUi exposing (..)
 
 import Assets
 import Browser
-import Debug exposing (log)
 import Dict exposing (Dict)
-import ExtraEvents exposing (classIf, emptyElement)
+import ExtraEvents exposing (classIf, emptyElement, onClickAlwaysStopPropagation)
 import Html exposing (Attribute, Html, div, img, input, text)
 import Html.Attributes exposing (class, placeholder, src)
 import Html.Events exposing (onClick)
@@ -16,12 +15,14 @@ main =
 
 type alias Model =
     { tree : HashTree
+    , focusedNodeId : String
     }
 
 
 init : () -> ( Model, Cmd Msg )
 init _ =
     ( { tree = sampleData
+      , focusedNodeId = homeId
       }
     , Cmd.none
     )
@@ -34,12 +35,16 @@ subscriptions _ =
 
 type Msg
     = None
+    | Focus String
     | Toggle String
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        Focus id ->
+            ( { model | focusedNodeId = id }, Cmd.none )
+
         Toggle id ->
             ( { model | tree = toggleVisibility model.tree id }
             , Cmd.none
@@ -52,22 +57,36 @@ update msg model =
 view : Model -> Html Msg
 view model =
     div [ class "page" ]
-        [ viewSidebar model.tree, viewTree, viewSearch ]
+        [ viewSidebar model
+        , viewTree model
 
-
-viewSidebar treeHash =
-    div [ class "sidebar" ]
-        [ div [ class "sidebar-items-children" ]
-            (getHomeItems treeHash |> List.map (viewSidebarItem treeHash))
+        --, viewSearch
         ]
 
 
-viewSidebarItem : HashTree -> TreeItem -> Html Msg
-viewSidebarItem treeHash item =
+viewSidebar model =
+    div [ class "sidebar" ]
+        [ viewChildren model (getHomeItems model.tree)
+        ]
+
+
+viewChildren model childs =
+    div [ class "sidebar-items-children" ]
+        (List.map (viewSidebarItem model)
+            childs
+        )
+
+
+viewSidebarItem : Model -> TreeItem -> Html Msg
+viewSidebarItem model item =
     div []
-        [ div [ class "sidebar-item" ]
+        [ div
+            [ class "sidebar-item"
+            , classIf (model.focusedNodeId == item.id) "focused"
+            , onClick (Focus item.id)
+            ]
             [ div
-                [ onClick (Toggle item.id)
+                [ onClickAlwaysStopPropagation (Toggle item.id)
                 , class "sidebar-item-chevron"
                 , classIf item.isVisible "open"
                 ]
@@ -75,87 +94,94 @@ viewSidebarItem treeHash item =
             , div [] [ text item.title ]
             ]
         , if item.isVisible then
-            getChildren treeHash item.id |> viewChildren treeHash
+            getChildren model.tree item.id |> viewChildren model
 
           else
             emptyElement
         ]
 
 
-viewChildren treeHash childs =
-    div [ class "sidebar-items-children" ]
-        (List.map (viewSidebarItem treeHash)
-            childs
-        )
-
-
-viewSearch =
+viewSearch model =
     div [ class "search" ]
         [ input [ placeholder "Search for videos, channels", class "search-input" ] []
-        , tree
+        , viewTree model
         ]
 
 
-viewTree =
+viewTree model =
     div [ class "tree" ]
-        [ tree ]
+        [ viewHeader model, viewTreeBody model ]
 
 
-tree =
+viewHeader model =
+    if model.focusedNodeId == homeId then
+        emptyElement
+
+    else
+        let
+            parents =
+                getParents model.tree model.focusedNodeId
+
+            focusedNode =
+                findById model.focusedNodeId model.tree |> Maybe.map .title |> Maybe.withDefault ""
+        in
+        div [class "header"]
+            (parents
+                |> List.map viewHeaderPart
+                |> List.concat
+                |> (flip List.append) [ viewFocusedHeaderPart focusedNode ]
+            )
+
+
+viewHeaderPart n =
+    [ div [ class "header-item", onClick (Focus n.id) ] [ text n.title ]
+    , div [] [ text ">" ]
+    ]
+
+
+viewFocusedHeaderPart title =
+    div [ class "header-item" ] [ text title ]
+
+
+viewTreeBody model =
+    viewHomeChildren model (getChildren model.tree model.focusedNodeId)
+
+
+viewHomeChildren model nodes =
     div [ class "children" ]
-        [ rowTitle "Ambient"
-        , div [ class "children" ]
-            [ rowTitle "Deeply house"
-            , div [ class "children" ]
-                [ div []
-                    [ rowTitle "Deep house"
-                    , rowTitle "Dark house"
-                    , videoTitle "Video"
-                    , rowTitle "Deep true dark house"
-                    ]
-                ]
-            , rowTitle "Dark house"
-            , div [ class "children" ]
-                [ videoTitle "Video"
-                , videoTitle "Video"
-                , videoTitle "Video"
-                , videoTitle "Video"
-                , videoTitle "Video"
-                , videoTitle "Video"
-                , videoTitle "Video"
-                , videoTitle "Video"
-                , rowTitle "Nested Dark house"
-                , div [ class "children" ]
-                    [ videoTitle "Video"
-                    , videoTitle "Video"
-                    , videoTitle "Video"
-                    , videoTitle "Video"
-                    , videoTitle "Video"
-                    , videoTitle "Video"
-                    , videoTitle "Video"
-                    , videoTitle "Video"
-                    ]
-                ]
-            , rowTitle "Deep true dark house"
-            , rowTitle "Deep true dark house"
-            , rowTitle "Deep true dark house"
-            , rowTitle "Deep true dark house"
-            , rowTitle "Deep true dark house"
-            , rowTitle "Deep true dark house"
-            ]
+        (nodes |> List.map (viewHomeNode model))
+
+
+viewHomeNode model n =
+    let
+        title =
+            case n.payload of
+                Playlist ->
+                    rowTitle n.title
+
+                Video info ->
+                    videoTitle n.title info
+    in
+    div []
+        [ title
+        , if n.isVisible then
+            getChildren model.tree n.id |> viewHomeChildren model
+
+          else
+            emptyElement
         ]
 
 
 rowTitle title =
-    node title playlistIcon False
+    node title playlistIcon
 
 
-videoTitle title =
-    node title videoIcon False
+videoTitle title info =
+    node title (videoIcon info.videoId)
 
 
-node title iconElement isHidden =
-    div [ class "node-title", classIf isHidden "hidden" ]
+node title iconElement =
+    div [ class "node-title" ]
         [ div [ class "branch" ] []
         , div [ class "branch-bubble" ] []
         , iconElement
@@ -164,8 +190,8 @@ node title iconElement isHidden =
         ]
 
 
-videoIcon =
-    img [ src "https://i.ytimg.com/vi/gmQJVl51yCc/mqdefault.jpg", class "image" ] []
+videoIcon videoId =
+    img [ src ("https://i.ytimg.com/vi/" ++ videoId ++ "/mqdefault.jpg"), class "image" ] []
 
 
 playlistIcon =
@@ -173,8 +199,7 @@ playlistIcon =
 
 
 
---TREE STRUCTRUE
---type HashTree =
+--TREE STRUCTURE
 
 
 type alias TreeItem =
@@ -182,27 +207,53 @@ type alias TreeItem =
     , title : String
     , isVisible : Bool
     , children : List String
+    , payload : NodeType
     }
+
+
+type NodeType
+    = Playlist
+    | Video VideoInfo
+
+
+type alias VideoInfo =
+    { videoId : String }
 
 
 type alias HashTree =
     Dict String TreeItem
 
 
+sampleData : HashTree
 sampleData =
     Dict.fromList
-        [ ( home, TreeItem home home True [ "1", "2" ] )
-        , ( "1", TreeItem "1" "Ambient" True [ "1.1", "1.2", "1.3" ] )
-        , ( "1.1", TreeItem "1.1" "Ambient Child 1" False [] )
-        , ( "1.2", TreeItem "1.2" "Ambient Child 2" False [] )
-        , ( "1.3", TreeItem "1.3" "Ambient Child 3" False [] )
-        , ( "2", TreeItem "2" "Deep House" False [] )
+        [ channel homeId homeId [ "1", "2" ]
+        , channel "1" "Ambient" [ "1.1", "1.2", "1.3" ]
+        , leafChannel "1.1" "Ambient Child 1"
+        , leafChannel "1.2" "Ambient Child 2"
+        , channel "1.3" "Ambient Child 3" [ "1.3.1", "1.3.2", "1.3.3" ]
+        , leafVideo "1.3.1" "Ambient Child 3 Video 1" "gmQJVl51yCc"
+        , leafVideo "1.3.2" "Ambient Child 3 Video 2" "5o_uF1L5l6o"
+        , leafVideo "1.3.3" "Ambient Child 3 Video 3" "tDolNU89SXI"
+        , leafChannel "2" "Deep House"
         ]
+
+
+leafChannel id title =
+    channel id title []
+
+
+leafVideo id title videoId =
+    ( id, TreeItem id title True [] (Video { videoId = videoId }) )
+
+
+channel id title children =
+    ( id, TreeItem id title True children Playlist )
 
 
 getHomeItems : HashTree -> List TreeItem
 getHomeItems hasTree =
-    getChildren hasTree home
+    getChildren hasTree homeId
 
 
 getChildren : HashTree -> String -> List TreeItem
@@ -211,17 +262,39 @@ getChildren hashTree nodeId =
         childrenIds =
             hashTree
                 |> Dict.get nodeId
-                |> Maybe.map (\i -> i.children)
+                |> Maybe.map .children
                 |> Maybe.withDefault []
     in
     childrenIds
-        |> List.map (\id -> Dict.get id hashTree)
+        |> List.map (flip Dict.get hashTree)
         |> filterOutNothing
 
 
-filterOutNothing : List (Maybe a) -> List a
-filterOutNothing maybes =
-    List.filterMap identity maybes
+getParents : HashTree -> String -> List TreeItem
+getParents tree id =
+    getParentsImp tree id []
+
+
+getParentsImp tree id parents =
+    case findBy (hasChild id) tree of
+        Just parentNode ->
+            getParentsImp tree parentNode.id (parentNode :: parents)
+
+        Nothing ->
+            parents
+
+
+hasChild id n =
+    List.member id n.children
+
+
+findBy : (TreeItem -> Bool) -> HashTree -> Maybe TreeItem
+findBy predicate tree =
+    Dict.values tree |> List.filter predicate |> List.head
+
+
+findById id tree =
+    Dict.get id tree
 
 
 toggleVisibility : HashTree -> String -> HashTree
@@ -238,5 +311,24 @@ toggleVisibility hash id =
             hash
 
 
-home =
-    "HOME"
+homeId =
+    "Home"
+
+
+
+--****EXTRA****
+--FUNCTIONS
+
+
+flip func a b =
+    func b a
+
+
+
+-- LISTS
+
+
+filterOutNothing : List (Maybe a) -> List a
+filterOutNothing maybes =
+    List.filterMap identity maybes
+
