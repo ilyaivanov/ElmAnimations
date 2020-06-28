@@ -1,5 +1,6 @@
 module NewUi exposing (..)
 
+import Assets
 import Browser
 import ExtraEvents exposing (classIf)
 import Html exposing (Attribute, Html, div, img, input, text)
@@ -46,12 +47,26 @@ view model =
 
 
 viewSidebar =
-    div [ class "sidebar" ] [ text "Sidebar" ]
+    div [ class "sidebar" ]
+        [ viewSidebarItem
+        , viewSidebarItem
+        , div [ class "sidebar-items-children" ]
+            [ viewSidebarItem
+            , viewSidebarItem
+            ]
+        ]
+
+
+viewSidebarItem =
+    div [ class "sidebar-item" ]
+        [ img [ src Assets.chevron ] []
+        , div [] [ text "Ambient " ]
+        ]
 
 
 viewSearch =
     div [ class "search" ]
-        [  input [placeholder "Search for videos, channels", class "search-input"] []
+        [ input [ placeholder "Search for videos, channels", class "search-input" ] []
         , tree
         ]
 

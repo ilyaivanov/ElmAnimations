@@ -128,3 +128,16 @@ body {
     flex: 1;
 }
 
+
+.sidebar-item{
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+}
+.sidebar-item>img{
+    width: 10px;
+    height: 10px;
+}
+.sidebar-items-children{
+    margin-left: 10px;
+}
