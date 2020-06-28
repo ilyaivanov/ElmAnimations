@@ -2,9 +2,12 @@ module NewUi exposing (..)
 
 import Assets
 import Browser
-import ExtraEvents exposing (classIf)
+import Debug exposing (log)
+import Dict exposing (Dict)
+import ExtraEvents exposing (classIf, emptyElement)
 import Html exposing (Attribute, Html, div, img, input, text)
 import Html.Attributes exposing (class, placeholder, src)
+import Html.Events exposing (onClick)
 
 
 main =
@@ -12,13 +15,13 @@ main =
 
 
 type alias Model =
-    { foo : Int
+    { tree : HashTree
     }
 
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( { foo = 1
+    ( { tree = sampleData
       }
     , Cmd.none
     )
@@ -31,11 +34,17 @@ subscriptions _ =
 
 type Msg
     = None
+    | Toggle String
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        Toggle id ->
+            ( { model | tree = toggleVisibility model.tree id }
+            , Cmd.none
+            )
+
         None ->
             ( model, Cmd.none )
 
@@ -43,25 +52,41 @@ update msg model =
 view : Model -> Html Msg
 view model =
     div [ class "page" ]
-        [ viewSidebar, viewTree, viewSearch ]
+        [ viewSidebar model.tree, viewTree, viewSearch ]
 
 
-viewSidebar =
+viewSidebar treeHash =
     div [ class "sidebar" ]
-        [ viewSidebarItem
-        , viewSidebarItem
-        , div [ class "sidebar-items-children" ]
-            [ viewSidebarItem
-            , viewSidebarItem
+        [ div [ class "sidebar-items-children" ]
+            (getHomeItems treeHash |> List.map (viewSidebarItem treeHash))
+        ]
+
+
+viewSidebarItem : HashTree -> TreeItem -> Html Msg
+viewSidebarItem treeHash item =
+    div []
+        [ div [ class "sidebar-item" ]
+            [ div
+                [ onClick (Toggle item.id)
+                , class "sidebar-item-chevron"
+                , classIf item.isVisible "open"
+                ]
+                [ img [ src Assets.chevron ] [] ]
+            , div [] [ text item.title ]
             ]
+        , if item.isVisible then
+            getChildren treeHash item.id |> viewChildren treeHash
+
+          else
+            emptyElement
         ]
 
 
-viewSidebarItem =
-    div [ class "sidebar-item" ]
-        [ img [ src Assets.chevron ] []
-        , div [] [ text "Ambient " ]
-        ]
+viewChildren treeHash childs =
+    div [ class "sidebar-items-children" ]
+        (List.map (viewSidebarItem treeHash)
+            childs
+        )
 
 
 viewSearch =
@@ -145,3 +170,73 @@ videoIcon =
 
 playlistIcon =
     div [ class "circle" ] []
+
+
+
+--TREE STRUCTRUE
+--type HashTree =
+
+
+type alias TreeItem =
+    { id : String
+    , title : String
+    , isVisible : Bool
+    , children : List String
+    }
+
+
+type alias HashTree =
+    Dict String TreeItem
+
+
+sampleData =
+    Dict.fromList
+        [ ( home, TreeItem home home True [ "1", "2" ] )
+        , ( "1", TreeItem "1" "Ambient" True [ "1.1", "1.2", "1.3" ] )
+        , ( "1.1", TreeItem "1.1" "Ambient Child 1" False [] )
+        , ( "1.2", TreeItem "1.2" "Ambient Child 2" False [] )
+        , ( "1.3", TreeItem "1.3" "Ambient Child 3" False [] )
+        , ( "2", TreeItem "2" "Deep House" False [] )
+        ]
+
+
+getHomeItems : HashTree -> List TreeItem
+getHomeItems hasTree =
+    getChildren hasTree home
+
+
+getChildren : HashTree -> String -> List TreeItem
+getChildren hashTree nodeId =
+    let
+        childrenIds =
+            hashTree
+                |> Dict.get nodeId
+                |> Maybe.map (\i -> i.children)
+                |> Maybe.withDefault []
+    in
+    childrenIds
+        |> List.map (\id -> Dict.get id hashTree)
+        |> filterOutNothing
+
+
+filterOutNothing : List (Maybe a) -> List a
+filterOutNothing maybes =
+    List.filterMap identity maybes
+
+
+toggleVisibility : HashTree -> String -> HashTree
+toggleVisibility hash id =
+    let
+        itemM =
+            Dict.get id hash
+    in
+    case itemM of
+        Just item ->
+            Dict.insert id { item | isVisible = not item.isVisible } hash
+
+        Nothing ->
+            hash
+
+
+home =
+    "HOME"
