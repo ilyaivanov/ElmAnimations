@@ -11,6 +11,8 @@ type alias MouseMoveEvent =
     , pageY : Int
     , layerX : Int
     , layerY : Int
+    , offsetX : Int
+    , offsetY : Int
     , buttons : Int
     }
 
@@ -21,20 +23,14 @@ type alias Offsets =
     }
 
 
-type alias MouseDownEvent =
-    { offsets : Offsets
-    , mousePosition : MouseMoveEvent
-    }
-
-
 onMouseMove : (MouseMoveEvent -> msg) -> Attribute msg
 onMouseMove tagger =
     on "mousemove" (Json.map tagger mouseMoveDecoder)
 
 
-onMouseDown : (MouseDownEvent -> msg) -> Attribute msg
+onMouseDown : (MouseMoveEvent -> msg) -> Attribute msg
 onMouseDown tagger =
-    on "mousedown" (Json.map tagger mouseDownDecoder)
+    on "mousedown" (Json.map tagger mouseMoveDecoder)
 
 
 
@@ -44,6 +40,10 @@ onMouseDown tagger =
 onMouseDownAlwaysStopPropagation : msg -> Attribute msg
 onMouseDownAlwaysStopPropagation msg =
     stopPropagationOn "mousedown" (Json.map alwaysStop (Json.succeed msg))
+
+onMouseMoveAlwaysStopPropagation : (MouseMoveEvent -> msg) -> Attribute msg
+onMouseMoveAlwaysStopPropagation tagger =
+    stopPropagationOn "mousemove" (Json.map alwaysStop (Json.map tagger mouseMoveDecoder))
 
 
 onMouseUp : msg -> Attribute msg
@@ -60,28 +60,16 @@ onMouseEnter tagger =
     on "mouseenter" (Json.succeed tagger)
 
 
-mouseDownDecoder : Json.Decoder MouseDownEvent
-mouseDownDecoder =
-    Json.map2 MouseDownEvent offsetsDecoder mouseMoveDecoder
-
-
 mouseMoveDecoder : Json.Decoder MouseMoveEvent
 mouseMoveDecoder =
-    Json.map5 MouseMoveEvent
+    Json.map7 MouseMoveEvent
         (Json.field "pageX" Json.int)
         (Json.field "pageY" Json.int)
         (Json.field "layerX" Json.int)
         (Json.field "layerY" Json.int)
-        (Json.field "buttons" Json.int)
-
-
-offsetsDecoder : Json.Decoder Offsets
-offsetsDecoder =
-    Json.map2 Offsets
         (Json.field "offsetX" Json.int)
         (Json.field "offsetY" Json.int)
-
-
+        (Json.field "buttons" Json.int)
 
 --noinspection ALL
 

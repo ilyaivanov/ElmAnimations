@@ -2,10 +2,11 @@ module NewUi exposing (main)
 
 import Assets
 import Browser
+import Debug exposing (log)
 import Dict exposing (Dict)
-import ExtraEvents exposing (classIf, emptyElement, onClickAlwaysStopPropagation)
+import ExtraEvents exposing (MouseMoveEvent, attributeIf, classIf, emptyElement, onClickAlwaysStopPropagation, onMouseDown, onMouseMove, onMouseMoveAlwaysStopPropagation, onMouseUp)
 import Html exposing (Attribute, Html, div, img, input, text)
-import Html.Attributes exposing (class, placeholder, src)
+import Html.Attributes exposing (class, placeholder, src, style)
 import Html.Events exposing (onClick)
 
 
@@ -16,6 +17,7 @@ main =
 type alias Model =
     { tree : HashTree
     , focusedNodeId : String
+    , dragState : DragState
     }
 
 
@@ -23,6 +25,7 @@ init : () -> ( Model, Cmd Msg )
 init _ =
     ( { tree = sampleData
       , focusedNodeId = homeId
+      , dragState = NoDrag
       }
     , Cmd.none
     )
@@ -37,6 +40,10 @@ type Msg
     = None
     | Focus String
     | Toggle String
+    | MouseDownOnCircle String MouseMoveEvent
+    | MouseMove MouseMoveEvent
+    | MouseMoveOverNode String MouseMoveEvent
+    | MouseUp
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -44,6 +51,18 @@ update msg model =
     case msg of
         Focus id ->
             ( { model | focusedNodeId = id }, Cmd.none )
+
+        MouseDownOnCircle id event ->
+            ( { model | dragState = updateOnMouseDown event id }, Cmd.none )
+
+        MouseMoveOverNode id event ->
+            ( { model | dragState = updateOnMouseMove model.dragState event (Just id) }, Cmd.none )
+
+        MouseMove event ->
+            ( { model | dragState = updateOnMouseMove model.dragState event Nothing }, Cmd.none )
+
+        MouseUp ->
+            ( updateOnDrop model, Cmd.none )
 
         Toggle id ->
             ( { model | tree = toggleVisibility model.tree id }
@@ -56,12 +75,33 @@ update msg model =
 
 view : Model -> Html Msg
 view model =
-    div [ class "page" ]
+    div
+        [ class "page"
+        , classIf (isDraggingSomething model.dragState) "page-during-drag"
+        , attributeIf (shouldListenToDragEvents model.dragState) (onMouseMove MouseMove)
+        , attributeIf (shouldListenToDragEvents model.dragState) (onMouseUp MouseUp)
+        ]
         [ viewSidebar model
         , viewTree model
+        , viewDragItem model
 
         --, viewSearch
         ]
+
+
+viewDragItem : Model -> Html Msg
+viewDragItem model =
+    case getDraggingCoords model.dragState of
+        Just coords ->
+            div
+                [ class "drag-bolt"
+                , style "top" (String.fromInt coords.pageY ++ "px")
+                , style "left" (String.fromInt coords.pageX ++ "px")
+                ]
+                []
+
+        Nothing ->
+            emptyElement
 
 
 viewSidebar model =
@@ -157,10 +197,10 @@ viewHomeNode model n =
         title =
             case n.payload of
                 Playlist ->
-                    node n.title (playlistIcon n)
+                    node model n (playlistIcon model n)
 
                 Video info ->
-                    node n.title (videoIcon info.videoId)
+                    node model n (videoIcon info.videoId)
     in
     div []
         [ title
@@ -172,13 +212,56 @@ viewHomeNode model n =
         ]
 
 
-node title iconElement =
-    div [ class "node-title" ]
+node model n iconElement =
+    let
+        dropIndicator =
+            case getItemUnder model.dragState of
+                Just ( event, id ) ->
+                    if n.id == id then
+                        case getDragPlacement event of
+                            AfterNode ->
+                                dropPlaceholderAfter
+
+                            BeforeNode ->
+                                dropPlaceholderBefore
+
+                            InsideNode ->
+                                dropPlaceholderInside
+
+                    else
+                        emptyElement
+
+                Nothing ->
+                    emptyElement
+    in
+    div
+        [ class "node-title"
+        , attributeIf (shouldListenToDragEvents model.dragState) (onMouseMoveAlwaysStopPropagation (MouseMoveOverNode n.id))
+        ]
         [ div [ class "branch" ] []
         , div [ class "branch-bubble" ] []
         , iconElement
-        , div [ class "node-title-text" ] [ text title ]
+        , div [ class "node-title-text" ] [ text n.title ]
         , div [ class "row-icon" ] [ text "X" ]
+        , dropIndicator
+        ]
+
+
+dropPlaceholderBefore =
+    div [ class "drop-placeholder-before" ]
+        [ div [ class "small-circle" ] []
+        ]
+
+
+dropPlaceholderAfter =
+    div [ class "drop-placeholder-after" ]
+        [ div [ class "small-circle" ] []
+        ]
+
+
+dropPlaceholderInside =
+    div [ class "drop-placeholder-inside" ]
+        [ div [ class "small-circle" ] []
         ]
 
 
@@ -186,8 +269,14 @@ videoIcon videoId =
     img [ src ("https://i.ytimg.com/vi/" ++ videoId ++ "/mqdefault.jpg"), class "image" ] []
 
 
-playlistIcon n =
-    div [ class "circle", onClick (Focus n.id) ] []
+playlistIcon model n =
+    div
+        [ class "circle"
+        , classIf (getItemBeingDragged model.dragState |> hasValue n.id) "being-dragged"
+        , onClick (Focus n.id)
+        , onMouseDown (MouseDownOnCircle n.id)
+        ]
+        []
 
 
 
@@ -276,6 +365,43 @@ getParentsImp tree id parents =
             parents
 
 
+toggleVisibility : HashTree -> String -> HashTree
+toggleVisibility hash id =
+    mapItem id (\item -> { item | isVisible = not item.isVisible }) hash
+
+
+removeFromParent id tree =
+    mapParent id (\parent -> { parent | children = parent.children |> List.filter ((/=) id) }) tree
+
+
+insertItemBefore itemBeforeId itemId tree =
+    let
+        mapChild child =
+            if child == itemBeforeId then
+                [ itemId, child ]
+
+            else
+                [ child ]
+    in
+    mapParent itemBeforeId (\item -> { item | children = item.children |> List.map mapChild |> List.concat }) tree
+
+
+insertItemAfter itemBeforeId itemId tree =
+    let
+        mapChild child =
+            if child == itemBeforeId then
+                [ child, itemId ]
+
+            else
+                [ child ]
+    in
+    mapParent itemBeforeId (\item -> { item | children = item.children |> List.map mapChild |> List.concat }) tree
+
+
+insertItemInside parentId newItemId tree =
+    mapItem parentId (\item -> { item | children = newItemId :: item.children }) tree
+
+
 hasChild id n =
     List.member id n.children
 
@@ -289,18 +415,175 @@ findById id tree =
     Dict.get id tree
 
 
-toggleVisibility : HashTree -> String -> HashTree
-toggleVisibility hash id =
-    case Dict.get id hash of
+mapItem id mapper tree =
+    case Dict.get id tree of
         Just item ->
-            Dict.insert id { item | isVisible = not item.isVisible } hash
+            Dict.insert id (mapper item) tree
 
         Nothing ->
-            hash
+            tree
+
+
+mapParent id mapper tree =
+    case findBy (hasChild id) tree of
+        Just parent ->
+            tree |> Dict.insert parent.id (mapper parent)
+
+        Nothing ->
+            tree
 
 
 homeId =
     "Home"
+
+
+
+--DRAG STATE
+
+
+type DragState
+    = NoDrag
+    | PressedNotYetMoved MouseMoveEvent String Float
+    | DraggingSomething MouseMoveEvent String (Maybe String)
+
+
+shouldListenToDragEvents : DragState -> Bool
+shouldListenToDragEvents dragState =
+    case dragState of
+        NoDrag ->
+            False
+
+        _ ->
+            True
+
+
+isDraggingSomething dragState =
+    getDraggingCoords dragState |> hasSomething
+
+
+getDraggingCoords dragState =
+    case dragState of
+        DraggingSomething event _ _ ->
+            Just event
+
+        _ ->
+            Nothing
+
+
+getItemUnder : DragState -> Maybe ( MouseMoveEvent, String )
+getItemUnder dragState =
+    case dragState of
+        DraggingSomething event _ idMaybe ->
+            idMaybe |> Maybe.map (Tuple.pair event)
+
+        _ ->
+            Nothing
+
+
+getItemBeingDragged : DragState -> Maybe String
+getItemBeingDragged dragState =
+    case dragState of
+        DraggingSomething _ id _ ->
+            Just id
+
+        _ ->
+            Nothing
+
+
+updateOnMouseDown event nodeId =
+    PressedNotYetMoved event nodeId 0
+
+
+updateOnMouseMove state newMousePosition overItem =
+    case state of
+        NoDrag ->
+            state
+
+        PressedNotYetMoved previousPosition id distance ->
+            let
+                newDistance =
+                    distance + getDistance previousPosition newMousePosition
+            in
+            --makes much a better UX - we need to drag at least 3 pixels in order to count as drag
+            --otherwise this is considered a click (play if clicking on a card)
+            if newDistance > 5 then
+                DraggingSomething newMousePosition id overItem
+
+            else
+                PressedNotYetMoved newMousePosition id newDistance
+
+        DraggingSomething _ id _ ->
+            DraggingSomething newMousePosition id overItem
+
+
+updateOnDrop model =
+    let
+        itemIdOverM =
+            getItemBeingDragged model.dragState
+
+        itemIdUnderM =
+            getItemUnder model.dragState
+    in
+    case ( itemIdUnderM, itemIdOverM ) of
+        ( Just ( event, itemIdUnder ), Just itemIdOver ) ->
+            let
+                modifier =
+                    case getDragPlacement event of
+                        AfterNode ->
+                            insertItemAfter
+
+                        BeforeNode ->
+                            insertItemBefore
+
+                        InsideNode ->
+                            insertItemInside
+
+                foo =
+                    model.tree
+                        |> removeFromParent itemIdOver
+                        |> modifier itemIdUnder itemIdOver
+            in
+            { model | dragState = NoDrag, tree = foo }
+
+        _ ->
+            { model | dragState = NoDrag }
+
+
+type DragPlacement
+    = AfterNode
+    | BeforeNode
+    | InsideNode
+
+
+
+--TODO: this doesn't account for different height in playlist/video nodes
+-- works only for playlist nodes right now
+-- also align node to the center (current margin only from the top
+-- also offsetY behaves very strange - it sends 0-10 in padded area, then in container starts from the zero again
+
+
+getDragPlacement event =
+    if event.offsetY > 25 then
+        if event.offsetX > 1030 then
+            InsideNode
+
+        else
+            AfterNode
+
+    else
+        BeforeNode
+
+
+getDistance : MouseMoveEvent -> MouseMoveEvent -> Float
+getDistance point1 point2 =
+    sqrt
+        (toFloat
+            ((point1.pageX - point2.pageX)
+                ^ 2
+                + (point1.pageY - point2.pageY)
+                ^ 2
+            )
+        )
 
 
 
@@ -319,3 +602,25 @@ flip func a b =
 filterOutNothing : List (Maybe a) -> List a
 filterOutNothing maybes =
     List.filterMap identity maybes
+
+
+
+-- Maybe
+
+
+hasSomething maybe =
+    case maybe of
+        Just _ ->
+            True
+
+        Nothing ->
+            False
+
+
+hasValue value maybe =
+    case maybe of
+        Just maybeValue ->
+            maybeValue == value
+
+        Nothing ->
+            False

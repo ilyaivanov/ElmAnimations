@@ -14,7 +14,11 @@ body {
     cursor: pointer;
 }
 
-.circle:hover{
+.circle.being-dragged {
+    visibility: hidden;
+}
+
+.circle:hover {
     background-color: #aabadb;
 }
 
@@ -45,6 +49,7 @@ body {
     display: flex;
     flex-direction: row;
     align-items: center;
+    position: relative;
 }
 
 
@@ -90,7 +95,7 @@ body {
 }
 
 .children + .node-title {
-    padding-top: 0px;
+    padding-top: 0;
 }
 
 .buttons {
@@ -117,6 +122,20 @@ body {
     flex-direction: row;
     align-items: stretch;
     height: 100vh;
+}
+
+.page-during-drag {
+    user-select: none;
+    cursor: grabbing;
+}
+
+/*Unfortunately I don't know any other way to disable cursor effects on all nodes*/
+/*Thus I will need to disable ALL cursor effects in my app */
+.page-during-drag .drag-bolt,
+.page-during-drag .node-title-text,
+.page-during-drag .circle {
+    cursor: inherit;
+    pointer-events: none;
 }
 
 .sidebar {
@@ -202,4 +221,69 @@ body {
 
 .header-item:hover {
     text-decoration: underline;
+}
+
+
+/*Drag UI*/
+.drag-bolt {
+    position: absolute;
+    border-radius: 30px;
+    background-color: #28A745;
+    pointer-events: none;
+    animation-name: example;
+    animation-duration: 0.5s;
+
+    width: 16px;
+    height: 16px;
+    transform: translate(-8px, -8px);
+}
+
+@keyframes example {
+    from {
+        width: var(--cicle-size);
+        height: var(--cicle-size);
+        transform: translate(-15px, -15px);
+    }
+    to {
+        width: 16px;
+        height: 16px;
+        transform: translate(-8px, -8px);
+    }
+}
+
+.drop-placeholder-before {
+    position: absolute;
+    width: 21px;
+    height: 3px;
+    background-color: #E1E4E8;
+    top: 4px;
+    left: 985px;
+}
+
+.drop-placeholder-after {
+    position: absolute;
+    width: 21px;
+    height: 3px;
+    background-color: #E1E4E8;
+    bottom: -7px;
+    left: 985px;
+}
+
+.drop-placeholder-inside {
+    position: absolute;
+    width: 23px;
+    height: 3px;
+    background-color: #E1E4E8;
+    bottom: -7px;
+    left: 1012px;
+}
+
+.small-circle {
+    width: 10px;
+    height: 10px;
+    background-color: #28A745;
+    border-radius: 10px;
+    position: absolute;
+    right: -7px;
+    margin-top: -4px;
 }
