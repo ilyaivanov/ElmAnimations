@@ -6,7 +6,7 @@ import Debug exposing (log)
 import Dict exposing (Dict)
 import ExtraEvents exposing (MouseMoveEvent, attributeIf, classIf, emptyElement, onClickAlwaysStopPropagation, onMouseDown, onMouseMove, onMouseMoveAlwaysStopPropagation, onMouseUp)
 import Html exposing (Attribute, Html, div, img, input, text)
-import Html.Attributes exposing (class, placeholder, src, style)
+import Html.Attributes exposing (class, draggable, placeholder, src, style)
 import Html.Events exposing (onClick)
 
 
@@ -92,13 +92,29 @@ view model =
 viewDragItem : Model -> Html Msg
 viewDragItem model =
     case getDraggingCoords model.dragState of
-        Just coords ->
-            div
-                [ class "drag-bolt"
-                , style "top" (String.fromInt coords.pageY ++ "px")
-                , style "left" (String.fromInt coords.pageX ++ "px")
-                ]
-                []
+        Just ( coords, id ) ->
+            case findById id model.tree of
+                Just item ->
+                    case item.payload of
+                        Playlist ->
+                            div
+                                [ class "drag-bolt"
+                                , style "top" (String.fromInt coords.pageY ++ "px")
+                                , style "left" (String.fromInt coords.pageX ++ "px")
+                                ]
+                                []
+
+                        Video info ->
+                            img
+                                [ class "image drag-image"
+                                , src ("https://i.ytimg.com/vi/" ++ info.videoId ++ "/mqdefault.jpg")
+                                , style "top" (String.fromInt coords.pageY ++ "px")
+                                , style "left" (String.fromInt coords.pageX ++ "px")
+                                ]
+                                []
+
+                Nothing ->
+                    emptyElement
 
         Nothing ->
             emptyElement
@@ -200,7 +216,7 @@ viewHomeNode model n =
                     node model n (playlistIcon model n)
 
                 Video info ->
-                    node model n (videoIcon info.videoId)
+                    node model n (videoIcon model n info.videoId)
     in
     div []
         [ title
@@ -265,14 +281,22 @@ dropPlaceholderInside =
         ]
 
 
-videoIcon videoId =
-    img [ src ("https://i.ytimg.com/vi/" ++ videoId ++ "/mqdefault.jpg"), class "image" ] []
+videoIcon model n videoId =
+    img
+        [ src ("https://i.ytimg.com/vi/" ++ videoId ++ "/mqdefault.jpg")
+        , class "image"
+        , classIf (getItemBeingDragged model.dragState |> hasValue n.id) "hide"
+        , onClick (Focus n.id)
+        , onMouseDown (MouseDownOnCircle n.id)
+        , draggable "false"
+        ]
+        []
 
 
 playlistIcon model n =
     div
         [ class "circle"
-        , classIf (getItemBeingDragged model.dragState |> hasValue n.id) "being-dragged"
+        , classIf (getItemBeingDragged model.dragState |> hasValue n.id) "hide"
         , onClick (Focus n.id)
         , onMouseDown (MouseDownOnCircle n.id)
         ]
@@ -463,8 +487,8 @@ isDraggingSomething dragState =
 
 getDraggingCoords dragState =
     case dragState of
-        DraggingSomething event _ _ ->
-            Just event
+        DraggingSomething event id _ ->
+            Just ( event, id )
 
         _ ->
             Nothing

@@ -14,7 +14,7 @@ body {
     cursor: pointer;
 }
 
-.circle.being-dragged {
+.hide {
     visibility: hidden;
 }
 
@@ -132,6 +132,7 @@ body {
 /*Unfortunately I don't know any other way to disable cursor effects on all nodes*/
 /*Thus I will need to disable ALL cursor effects in my app */
 .page-during-drag .drag-bolt,
+.page-during-drag .drag-image,
 .page-during-drag .node-title-text,
 .page-during-drag .circle {
     cursor: inherit;
@@ -230,7 +231,7 @@ body {
     border-radius: 30px;
     background-color: #28A745;
     pointer-events: none;
-    animation-name: example;
+    animation-name: dragBoltShrink;
     animation-duration: 0.5s;
 
     width: 16px;
@@ -238,7 +239,7 @@ body {
     transform: translate(-8px, -8px);
 }
 
-@keyframes example {
+@keyframes dragBoltShrink {
     from {
         width: var(--cicle-size);
         height: var(--cicle-size);
@@ -249,6 +250,25 @@ body {
         height: 16px;
         transform: translate(-8px, -8px);
     }
+}
+
+@keyframes dragImageShrink {
+    from {
+        width: 80px;
+        transform: translate(-40px, -15px);
+    }
+    to {
+        width: 40px;
+        transform: translate(-20px, -8px);
+    }
+}
+
+.drag-image{
+    position: absolute;
+    animation-name: dragImageShrink;
+    animation-duration: 0.5s;
+    width: 40px;
+    transform: translate(-20px, -8px);
 }
 
 .drop-placeholder-before {
