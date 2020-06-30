@@ -2,12 +2,13 @@ module NewUi exposing (main)
 
 import Assets
 import Browser
-import Debug exposing (log)
 import Dict exposing (Dict)
 import ExtraEvents exposing (MouseMoveEvent, attributeIf, classIf, emptyElement, onClickAlwaysStopPropagation, onMouseDown, onMouseMove, onMouseMoveAlwaysStopPropagation, onMouseUp)
-import Html exposing (Attribute, Html, div, img, input, text)
-import Html.Attributes exposing (class, draggable, placeholder, src, style)
-import Html.Events exposing (onClick)
+import Html exposing (Attribute, Html, button, div, img, input, text)
+import Html.Attributes exposing (class, draggable, id, placeholder, src, style, value)
+import Html.Events exposing (onBlur, onClick, onInput)
+import Json.Decode as Json
+import Ports
 
 
 main =
@@ -18,7 +19,12 @@ type alias Model =
     { tree : HashTree
     , focusedNodeId : String
     , dragState : DragState
+    , editState : Maybe EditedNodeState
     }
+
+
+type alias EditedNodeState =
+    { id : String, text : String }
 
 
 init : () -> ( Model, Cmd Msg )
@@ -26,6 +32,7 @@ init _ =
     ( { tree = sampleData
       , focusedNodeId = homeId
       , dragState = NoDrag
+      , editState = Nothing
       }
     , Cmd.none
     )
@@ -33,17 +40,48 @@ init _ =
 
 subscriptions : Model -> Sub Msg
 subscriptions _ =
-    Sub.none
+    Sub.batch
+        [ Ports.gotNewId AddNewNode
+        , Ports.onWindowKeyUp mapLoadedBoards
+        ]
+
+
+mapLoadedBoards : Json.Value -> Msg
+mapLoadedBoards modelJson =
+    case Json.decodeValue decodeBoard modelJson of
+        Ok model ->
+            OnKeyPressed model
+
+        Err _ ->
+            None
+
+
+decodeBoard : Json.Decoder KeyPressedEvent
+decodeBoard =
+    Json.map KeyPressedEvent
+        (Json.field "key" Json.string)
+
+
+type alias KeyPressedEvent =
+    { key : String }
 
 
 type Msg
     = None
+    | AddNewNode String
+    | AddNewNodeClicked
     | Focus String
     | Toggle String
+    | RemoveNode String
     | MouseDownOnCircle String MouseMoveEvent
     | MouseMove MouseMoveEvent
     | MouseMoveOverNode String MouseMoveEvent
     | MouseUp
+    | EditNode String
+    | SetEditText String
+    | CompleteEdit
+    | OnKeyPressed KeyPressedEvent
+    | RevertEdit
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -63,6 +101,63 @@ update msg model =
 
         MouseUp ->
             ( updateOnDrop model, Cmd.none )
+
+        AddNewNodeClicked ->
+            ( model, Ports.requestNewId )
+
+        AddNewNode id ->
+            let
+                tree =
+                    model.tree
+                        |> Dict.insert id (createNewNode id)
+                        |> insertItemAsLastChild model.focusedNodeId id
+            in
+            { model | tree = tree } |> update (EditNode id)
+
+        RemoveNode id ->
+            ( { model | tree = Dict.remove id model.tree }, Cmd.none )
+
+        EditNode nodeId ->
+            let
+                text =
+                    findById nodeId model.tree |> Maybe.map .title |> Maybe.withDefault ""
+            in
+            ( { model | editState = Just { id = nodeId, text = text } }, Ports.onEditStart nodeId )
+
+        SetEditText newText ->
+            let
+                updateText n =
+                    { n | text = newText }
+
+                newEditState =
+                    model.editState |> Maybe.map updateText
+            in
+            ( { model | editState = newEditState }, Cmd.none )
+
+        CompleteEdit ->
+            let
+                ( newText, newId ) =
+                    model.editState |> Maybe.map (\n -> ( n.text, n.id )) |> Maybe.withDefault ( "", "" )
+
+                setText item =
+                    { item | title = newText }
+            in
+            ( { model | editState = Nothing, tree = mapItem newId setText model.tree }, Cmd.none )
+
+        OnKeyPressed event ->
+            case event.key of
+                "Escape" ->
+                    update RevertEdit model
+
+                "Enter" ->
+                    update CompleteEdit model
+
+                _ ->
+                    ( model, Cmd.none )
+
+        --
+        RevertEdit ->
+            ( { model | editState = Nothing }, Cmd.none )
 
         Toggle id ->
             ( { model | tree = toggleVisibility model.tree id }
@@ -166,7 +261,10 @@ viewSearch model =
 
 viewTree model =
     div [ class "tree" ]
-        [ viewHeader model, viewTreeBody model ]
+        [ viewHeader model
+        , viewTreeBody model
+        , button [ onClick AddNewNodeClicked ] [ text "add" ]
+        ]
 
 
 viewHeader model =
@@ -257,10 +355,33 @@ node model n iconElement =
         [ div [ class "branch" ] []
         , div [ class "branch-bubble" ] []
         , iconElement
-        , div [ class "node-title-text" ] [ text n.title ]
-        , div [ class "row-icon" ] [ text "X" ]
+        , viewText model.editState n
+        , div [ class "row-icon", onClick (EditNode n.id) ] [ text "E" ]
+        , div [ class "row-icon", onClick (RemoveNode n.id) ] [ text "X" ]
         , dropIndicator
         ]
+
+
+viewText nodeEditedState n =
+    let
+        nodeId =
+            nodeEditedState |> Maybe.map .id |> Maybe.withDefault ""
+
+        nodeText =
+            nodeEditedState |> Maybe.map .text |> Maybe.withDefault ""
+    in
+    if nodeId == n.id then
+        input
+            [ id ("input" ++ nodeId)
+            , class "row-title-input"
+            , onInput SetEditText
+            , onBlur CompleteEdit
+            , value nodeText
+            ]
+            []
+
+    else
+        div [ class "node-title-text" ] [ text n.title ]
 
 
 dropPlaceholderBefore =
@@ -314,6 +435,11 @@ type alias TreeItem =
     , children : List String
     , payload : NodeType
     }
+
+
+createNewNode : String -> TreeItem
+createNewNode id =
+    { id = id, title = "New Node", isVisible = False, children = [], payload = Playlist }
 
 
 type NodeType
@@ -424,6 +550,10 @@ insertItemAfter itemBeforeId itemId tree =
 
 insertItemInside parentId newItemId tree =
     mapItem parentId (\item -> { item | children = newItemId :: item.children }) tree
+
+
+insertItemAsLastChild parentId newItemId tree =
+    mapItem parentId (\item -> { item | children = List.append item.children [ newItemId ] }) tree
 
 
 hasChild id n =

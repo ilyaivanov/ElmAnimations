@@ -72,6 +72,7 @@ body {
     color: gray;
     margin-left: 20px;
     visibility: hidden;
+    cursor: pointer;
 }
 
 .row-icon:hover {
@@ -306,4 +307,13 @@ body {
     position: absolute;
     right: -7px;
     margin-top: -4px;
+}
+
+
+/*INPUT*/
+.row-title-input {
+    margin-left: 6px;
+    width: 400px;
+    font-family: inherit;
+    font-size: inherit;
 }

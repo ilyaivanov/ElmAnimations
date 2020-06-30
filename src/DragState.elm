@@ -1,6 +1,6 @@
 module DragState exposing (..)
 
-import ExtraEvents exposing (MouseDownEvent, MouseMoveEvent, emptyElement)
+import ExtraEvents exposing (MouseMoveEvent, emptyElement)
 import Html exposing (Html, div)
 import Html.Attributes exposing (class, coords, style)
 import Ports
@@ -20,7 +20,7 @@ type DragState
 type DragMsg
     = MouseUp
     | MouseMove MouseMoveEvent
-    | MouseDown String MouseDownEvent
+    | MouseDown String MouseMoveEvent
 
 
 initialState : DragState
@@ -32,7 +32,7 @@ update : DragState -> DragMsg -> DragState
 update state msg =
     case msg of
         MouseDown nodeId event ->
-            PressedNotYetMoved event.mousePosition nodeId 0
+            PressedNotYetMoved event nodeId 0
 
         MouseMove newMousePosition ->
             case state of
