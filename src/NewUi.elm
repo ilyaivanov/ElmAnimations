@@ -71,7 +71,8 @@ type Msg
     | AddNewNode String
     | AddNewNodeClicked
     | Focus String
-    | Toggle String
+    | ToggleVisibilityOnMainPage String
+    | ToggleVisibilityOnSidebar String
     | RemoveNode String
     | MouseDownOnCircle String MouseMoveEvent
     | MouseMove MouseMoveEvent
@@ -159,8 +160,13 @@ update msg model =
         RevertEdit ->
             ( { model | editState = Nothing }, Cmd.none )
 
-        Toggle id ->
-            ( { model | tree = toggleVisibility model.tree id }
+        ToggleVisibilityOnMainPage id ->
+            ( { model | tree = toggleVisibilityOnMainPage model.tree id }
+            , Cmd.none
+            )
+
+        ToggleVisibilityOnSidebar id ->
+            ( { model | tree = toggleVisibilityOnSidebar model.tree id }
             , Cmd.none
             )
 
@@ -237,14 +243,14 @@ viewSidebarItem model item =
             , onClick (Focus item.id)
             ]
             [ div
-                [ onClickAlwaysStopPropagation (Toggle item.id)
+                [ onClickAlwaysStopPropagation (ToggleVisibilityOnSidebar item.id)
                 , class "sidebar-item-chevron"
-                , classIf item.isVisible "open"
+                , classIf item.isVisibleOnSidebar "open"
                 ]
                 [ img [ src Assets.chevron ] [] ]
             , div [] [ text item.title ]
             ]
-        , if item.isVisible then
+        , if item.isVisibleOnSidebar then
             getChildren model.tree item.id |> viewChildren model
 
           else
@@ -318,7 +324,7 @@ viewHomeNode model n =
     in
     div []
         [ title
-        , if n.isVisible then
+        , if n.isVisibleOnMainPage then
             getChildren model.tree n.id |> viewHomeChildren model
 
           else
@@ -353,7 +359,15 @@ node model n iconElement =
         , attributeIf (shouldListenToDragEvents model.dragState) (onMouseMoveAlwaysStopPropagation (MouseMoveOverNode n.id))
         ]
         [ div [ class "branch" ] []
-        , div [ class "branch-bubble" ] []
+        , div [ class "branch-bubble", onClick (ToggleVisibilityOnMainPage n.id) ]
+            [ text
+                (if n.isVisibleOnMainPage then
+                    "-"
+
+                 else
+                    "+"
+                )
+            ]
         , iconElement
         , viewText model.editState n
         , div [ class "row-icon", onClick (EditNode n.id) ] [ text "E" ]
@@ -431,15 +445,11 @@ playlistIcon model n =
 type alias TreeItem =
     { id : String
     , title : String
-    , isVisible : Bool
+    , isVisibleOnMainPage : Bool
+    , isVisibleOnSidebar : Bool
     , children : List String
     , payload : NodeType
     }
-
-
-createNewNode : String -> TreeItem
-createNewNode id =
-    { id = id, title = "New Node", isVisible = False, children = [], payload = Playlist }
 
 
 type NodeType
@@ -470,16 +480,21 @@ sampleData =
         ]
 
 
+createNewNode : String -> TreeItem
+createNewNode id =
+    Tuple.second (leafChannel id "New Node")
+
+
 leafChannel id title =
     channel id title []
 
 
 leafVideo id title videoId =
-    ( id, TreeItem id title True [] (Video { videoId = videoId }) )
+    ( id, TreeItem id title True True [] (Video { videoId = videoId }) )
 
 
 channel id title children =
-    ( id, TreeItem id title True children Playlist )
+    ( id, TreeItem id title True True children Playlist )
 
 
 getHomeItems : HashTree -> List TreeItem
@@ -515,9 +530,14 @@ getParentsImp tree id parents =
             parents
 
 
-toggleVisibility : HashTree -> String -> HashTree
-toggleVisibility hash id =
-    mapItem id (\item -> { item | isVisible = not item.isVisible }) hash
+toggleVisibilityOnMainPage : HashTree -> String -> HashTree
+toggleVisibilityOnMainPage hash id =
+    mapItem id (\item -> { item | isVisibleOnMainPage = not item.isVisibleOnMainPage }) hash
+
+
+toggleVisibilityOnSidebar : HashTree -> String -> HashTree
+toggleVisibilityOnSidebar hash id =
+    mapItem id (\item -> { item | isVisibleOnSidebar = not item.isVisibleOnSidebar }) hash
 
 
 removeFromParent id tree =

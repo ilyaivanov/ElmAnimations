@@ -31,6 +31,8 @@ body {
 }
 
 .branch-bubble {
+    /*relative to the children left border*/
+    z-index: 1;
     position: absolute;
     margin-left: calc(var(--cicle-size) / -2 - var(--branch-bubble-width) / 2);
     width: var(--branch-bubble-width);
@@ -40,6 +42,13 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
+
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.branch-bubble:hover {
+    background-color: #a6bad5;
 }
 
 .node-title {
@@ -264,7 +273,7 @@ body {
     }
 }
 
-.drag-image{
+.drag-image {
     position: absolute;
     animation-name: dragImageShrink;
     animation-duration: 0.5s;
