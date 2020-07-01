@@ -33,14 +33,6 @@ onMouseDown tagger =
     on "mousedown" (Json.map tagger mouseMoveDecoder)
 
 
-
---noinspection ALL
-
-
-onMouseDownAlwaysStopPropagation : msg -> Attribute msg
-onMouseDownAlwaysStopPropagation msg =
-    stopPropagationOn "mousedown" (Json.map alwaysStop (Json.succeed msg))
-
 onMouseMoveAlwaysStopPropagation : (MouseMoveEvent -> msg) -> Attribute msg
 onMouseMoveAlwaysStopPropagation tagger =
     stopPropagationOn "mousemove" (Json.map alwaysStop (Json.map tagger mouseMoveDecoder))
@@ -50,14 +42,6 @@ onMouseUp : msg -> Attribute msg
 onMouseUp tagger =
     on "mouseup" (Json.succeed tagger)
 
-
-
---noinspection ALL
-
-
-onMouseEnter : msg -> Attribute msg
-onMouseEnter tagger =
-    on "mouseenter" (Json.succeed tagger)
 
 
 mouseMoveDecoder : Json.Decoder MouseMoveEvent
@@ -71,16 +55,6 @@ mouseMoveDecoder =
         (Json.field "offsetY" Json.int)
         (Json.field "buttons" Json.int)
 
---noinspection ALL
-
-
-onKeyUp : (String -> msg) -> Attribute msg
-onKeyUp tagger =
-    on "keyup" (Json.map tagger (Json.field "key" Json.string))
-
-
-
---noinspection ALL
 
 
 onClickAlwaysStopPropagation : msg -> Attribute msg
@@ -91,18 +65,6 @@ onClickAlwaysStopPropagation msg =
 alwaysStop x =
     ( x, True )
 
-
-
---noinspection ALL
-
-
-onClickIf : Bool -> msg -> Attribute msg
-onClickIf condition msg =
-    if condition then
-        onClick msg
-
-    else
-        emptyAttribute
 
 
 classIf : Bool -> String -> Attribute msg
