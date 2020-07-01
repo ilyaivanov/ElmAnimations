@@ -6,12 +6,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
     <meta name="theme-color" content="#000000"/>
     <meta name="description" content="Organize your videos like a boss"/>
-    <title>Elm Animations</title>
-    <link rel="stylesheet" href="/style.css?v=0.1"/>
+    <title>Grenfield</title>
+    <link rel="stylesheet" href="/newUiStyle.css?v=0.1"/>
     <script type="text/javascript" src="/elm.js?v=0.1"></script>
-    <script type="text/javascript" src="/focusPorts.js?v=0.1"></script>
-    <script type="text/javascript" src="/firebasePorts.js?v=0.1"></script>
-    <script type="text/javascript" src="/scrollPorts.js?v=0.1"></script>
+    <script type="text/javascript" src="/ports/focus.js?v=0.1"></script>
+    <script type="text/javascript" src="/ports/firebase.js?v=0.1"></script>
+    <script type="text/javascript" src="/ports/scroll.js?v=0.1"></script>
+    <script type="text/javascript" src="/ports/search.js?v=0.1"></script>
+    <script type="text/javascript" src="/ports/player.js?v=0.1"></script>
 </head>
 <body>
 <div id="elm-node">
@@ -23,7 +25,9 @@
     node: document.getElementById("elm-node"),
   });
 
-  registerDragPorts(app.ports);
+  // registerDragPorts(app.ports);
+  registerPlayerPorts(app.ports);
+  registerSearchPorts(app.ports);
   registerFocusPorts(app.ports);
   registerFirebasePorts(app.ports);
 </script>

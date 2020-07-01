@@ -1,14 +1,17 @@
-module Main exposing (..)
+module Main exposing (main)
 
+import Assets
 import Browser
-import DragState exposing (DragState(..))
-import ExtraEvents exposing (MouseMoveEvent, attributeIf, classIf, elementIf, onMouseMove, onMouseUp)
-import Html exposing (Attribute, Html, button, div, img, input, span, text)
-import Html.Attributes exposing ( class, draggable, id, src, style, value)
+import Dict exposing (Dict)
+import ExtraEvents exposing (MouseMoveEvent, attributeIf, classIf, elementIf, emptyElement, onClickAlwaysStopPropagation, onMouseDown, onMouseMove, onMouseMoveAlwaysStopPropagation, onMouseUp)
+import Html exposing (Attribute, Html, button, div, img, input, text)
+import Html.Attributes exposing (class, draggable, id, placeholder, src, style, value)
 import Html.Events exposing (onBlur, onClick, onInput)
 import Json.Decode as Json
-import Ports
-import Tree exposing (NodePayload(..), TreeItem, getChildrenForNode, hasId, initialNodes)
+import Ports exposing (VideoInfo)
+import Process
+import Random
+import Task
 
 
 main =
@@ -16,16 +19,15 @@ main =
 
 
 type alias Model =
-    { nodes : List TreeItem
-    , focus : Focus
-    , dragState : DragState.DragState
-    , nodeBeingEdited : Maybe EditedNodeState
+    { tree : HashTree
+    , focusedNodeId : String
+    , searchState : SearchState
+    , dragState : DragState
+    , editState : Maybe EditedNodeState
+    , searchTerm : String
+    , currentSearchId : String
+    , currentVideo : Maybe String
     }
-
-
-type Focus
-    = Root
-    | Node String
 
 
 type alias EditedNodeState =
@@ -34,10 +36,14 @@ type alias EditedNodeState =
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( { nodes = initialNodes
-      , focus = Root
-      , dragState = DragState.initialState
-      , nodeBeingEdited = Nothing
+    ( { tree = sampleData
+      , focusedNodeId = homeId
+      , searchState = SearchSuccess searchId
+      , dragState = NoDrag
+      , editState = Nothing
+      , searchTerm = ""
+      , currentSearchId = ""
+      , currentVideo = Nothing
       }
     , Cmd.none
     )
@@ -46,10 +52,10 @@ init _ =
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
-        [ Ports.onWindowKeyUp mapLoadedBoards
-        , Ports.gotNewId AddNewNode
+        [ Ports.gotNewId AddNewNode
+        , Ports.onWindowKeyUp mapLoadedBoards
+        , Ports.gotVideos GotVideos
         ]
-
 
 
 mapLoadedBoards : Json.Value -> Msg
@@ -68,106 +74,98 @@ decodeBoard =
         (Json.field "key" Json.string)
 
 
+type alias KeyPressedEvent =
+    { key : String }
+
+
 type Msg
-    = ToggleVisibility String
-    | SetFocus String
-    | RemoveFocus
-    | RemoveNode String
-    | AddNewNodeClicked
+    = None
     | AddNewNode String
-    | DndAction DragState.DragMsg
-    | DropItem
+    | AddNewNodeClicked
+    | Focus String
+    | ToggleVisibilityOnMainPage String
+    | ToggleVisibilityOnSidebar String
+    | RemoveNode String
+    | MouseDownOnCircle String MouseMoveEvent
+    | MouseMove MouseMoveEvent
+    | MouseMoveOverNode String MouseMoveEvent
+    | MouseUp
     | EditNode String
     | SetEditText String
     | CompleteEdit
-    | RevertEdit
     | OnKeyPressed KeyPressedEvent
-    | None
+    | RevertEdit
+    | OnSearchInput String
+    | AttemptToSearch String
+    | DebouncedSearch String String
+    | GotVideos (List VideoInfo)
+    | Play String
 
 
-type alias KeyPressedEvent =
-    { key : String }
+type SearchState
+    = SearchSuccess String
+    | SearchIsLoading
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        SetFocus itemId ->
-            ( { model | focus = Node itemId }, Cmd.none )
+        Focus id ->
+            ( { model | focusedNodeId = id }, Cmd.none )
 
-        RemoveFocus ->
-            ( { model | focus = Root }, Cmd.none )
+        MouseDownOnCircle id event ->
+            ( { model | dragState = updateOnMouseDown event id }, Cmd.none )
 
-        RemoveNode nodeId ->
-            ( { model | nodes = Tree.removeNode nodeId model.nodes }, Cmd.none )
+        MouseMoveOverNode id event ->
+            ( { model | dragState = updateOnMouseMove model.dragState event (Just id) }, Cmd.none )
 
-        DropItem ->
-            DragState.handleItemDrop model
+        MouseMove event ->
+            ( { model | dragState = updateOnMouseMove model.dragState event Nothing }, Cmd.none )
+
+        MouseUp ->
+            ( updateOnDrop model, Cmd.none )
+
+        AddNewNodeClicked ->
+            ( model, Ports.requestNewId )
+
+        AddNewNode id ->
+            let
+                tree =
+                    model.tree
+                        |> Dict.insert id (createNewNode id)
+                        |> insertItemAsLastChild model.focusedNodeId id
+            in
+            { model | tree = tree } |> update (EditNode id)
+
+        RemoveNode id ->
+            ( { model | tree = Dict.remove id model.tree }, Cmd.none )
 
         EditNode nodeId ->
             let
                 text =
-                    Tree.find (hasId nodeId) model.nodes |> Maybe.map .title |> Maybe.withDefault ""
+                    findById nodeId model.tree |> Maybe.map .title |> Maybe.withDefault ""
             in
-            ( { model | nodeBeingEdited = Just { id = nodeId, text = text } }, Ports.onEditStart nodeId )
+            ( { model | editState = Just { id = nodeId, text = text } }, Ports.onEditStart nodeId )
 
         SetEditText newText ->
             let
-                updateText node =
-                    { node | text = newText }
+                updateText n =
+                    { n | text = newText }
 
                 newEditState =
-                    model.nodeBeingEdited |> Maybe.map updateText
+                    model.editState |> Maybe.map updateText
             in
-            ( { model | nodeBeingEdited = newEditState }, Cmd.none )
+            ( { model | editState = newEditState }, Cmd.none )
 
         CompleteEdit ->
             let
-                newText =
-                    model.nodeBeingEdited |> Maybe.map .text |> Maybe.withDefault ""
-
-                newId =
-                    model.nodeBeingEdited |> Maybe.map .id |> Maybe.withDefault ""
+                ( newText, newId ) =
+                    model.editState |> Maybe.map (\n -> ( n.text, n.id )) |> Maybe.withDefault ( "", "" )
 
                 setText item =
-                    if item.id == newId then
-                        { item | title = newText }
-
-                    else
-                        item
+                    { item | title = newText }
             in
-            ( { model | nodeBeingEdited = Nothing, nodes = Tree.mapAllNodes setText model.nodes }, Cmd.none )
-
-        RevertEdit ->
-            ( { model | nodeBeingEdited = Nothing }, Cmd.none )
-
-        DndAction subMsg ->
-            let
-                newDragState =
-                    DragState.update model.dragState subMsg
-
-                haStartedToDrag =
-                    DragState.isDragging newDragState && not (DragState.isDragging model.dragState)
-
-                cmd =
-                    if haStartedToDrag then
-                        Ports.sendStartDrag
-
-                    else
-                        Cmd.none
-            in
-            ( { model | dragState = newDragState }, cmd )
-
-        ToggleVisibility id ->
-            let
-                toggleVisibility item =
-                    if item.id == id then
-                        { item | isVisible = not item.isVisible }
-
-                    else
-                        item
-            in
-            ( { model | nodes = Tree.mapAllNodes toggleVisibility model.nodes }, Cmd.none )
+            ( { model | editState = Nothing, tree = mapItem newId setText model.tree }, Cmd.none )
 
         OnKeyPressed event ->
             case event.key of
@@ -180,148 +178,280 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        AddNewNodeClicked ->
-            ( model, Ports.requestNewId )
+        RevertEdit ->
+            ( { model | editState = Nothing }, Cmd.none )
 
-        AddNewNode newId ->
+        ToggleVisibilityOnMainPage id ->
+            ( { model | tree = toggleVisibilityOnMainPage model.tree id }
+            , Cmd.none
+            )
+
+        OnSearchInput val ->
+            ( { model | searchTerm = val }
+            , Random.generate AttemptToSearch createId
+            )
+
+        AttemptToSearch debouncedSearchId ->
+            ( { model | currentSearchId = debouncedSearchId }
+            , Process.sleep 500 |> Task.perform (always (DebouncedSearch debouncedSearchId model.searchTerm))
+            )
+
+        DebouncedSearch id term ->
+            if id == model.currentSearchId then
+                ( { model | currentSearchId = "", searchState = SearchIsLoading }
+                , Ports.findVideos term
+                )
+
+            else
+                ( model, Cmd.none )
+
+        ToggleVisibilityOnSidebar id ->
+            ( { model | tree = toggleVisibilityOnSidebar model.tree id }
+            , Cmd.none
+            )
+
+        GotVideos videos ->
             let
-                nodes =
-                    List.append model.nodes [ Tree.createNewNode newId ]
+                insert n dict =
+                    Dict.insert n.id n dict
+
+                createVideoNode : VideoInfo -> TreeItem
+                createVideoNode info =
+                    { id = info.id
+                    , title = info.title
+                    , payload = Video info
+                    , isVisibleOnSidebar = False
+                    , isVisibleOnMainPage = False
+                    , children = []
+                    }
+
+                ids =
+                    List.map .id videos
+
+                setChildren n =
+                    { n | children = ids }
+
+                newTree =
+                    videos
+                        |> List.map createVideoNode
+                        |> List.foldr insert model.tree
+                        |> mapItem searchId setChildren
             in
-            ( { model | nodes = nodes }, Cmd.none )
+            ( { model | tree = newTree, searchState = SearchSuccess searchId }, Cmd.none )
+
+        Play videoId ->
+            ( model, Ports.play videoId )
 
         None ->
             ( model, Cmd.none )
 
 
+createId =
+    Random.float 0 1 |> Random.map String.fromFloat
+
+
 view : Model -> Html Msg
 view model =
-    let
-        isListeningToEvents =
-            DragState.shouldListenToDragEvents model.dragState
-    in
     div
-        [ attributeIf isListeningToEvents (onMouseMove (\n -> DndAction (DragState.MouseMove n)))
-        , attributeIf isListeningToEvents (onMouseUp DropItem)
-        , class "page"
-        , classIf (DragState.isDragging model.dragState) "page-during-drag"
+        [ class "page"
+        , classIf (isDraggingSomething model.dragState) "page-during-drag"
+        , attributeIf (shouldListenToDragEvents model.dragState) (onMouseMove MouseMove)
+        , attributeIf (shouldListenToDragEvents model.dragState) (onMouseUp MouseUp)
         ]
-        [ viewHeader model
-        , viewSample model
-        , DragState.viewDragIndicator model.dragState model.nodes
-        , viewNodeBeingDragged model
-        , button [ onClick AddNewNodeClicked ] [ text "Add" ]
+        [ viewSidebar model
+        , viewTree model
+        , viewDragItem model
+        , viewSearch model
+        , div [ id "youtubePlayer" ] []
         ]
 
 
-viewHeader : Model -> Html Msg
-viewHeader model =
-    div [ class "header" ]
-        (case model.focus of
-            Node nodeId ->
-                let
-                    viewHome =
-                        span [ class "clickable-text breadcrumb-part", onClick RemoveFocus ] [ text "Home" ]
+viewDragItem : Model -> Html Msg
+viewDragItem model =
+    case getDraggingCoords model.dragState of
+        Just ( coords, id ) ->
+            case findById id model.tree of
+                Just item ->
+                    case item.payload of
+                        Playlist ->
+                            div
+                                [ class "drag-bolt"
+                                , style "top" (String.fromInt coords.pageY ++ "px")
+                                , style "left" (String.fromInt coords.pageX ++ "px")
+                                ]
+                                []
 
-                    parents =
-                        Tree.getParents model.nodes nodeId
-
-                    selectedNode =
-                        Tree.find (\n -> n.id == nodeId) model.nodes
-
-                    viewClickablePart : TreeItem -> Html Msg
-                    viewClickablePart node =
-                        span [ class "clickable-text breadcrumb-part", onClick (SetFocus node.id) ] [ text node.title ]
-
-                    intermediateParts =
-                        if List.isEmpty parents then
-                            []
-
-                        else
-                            List.map viewClickablePart parents ++ [ viewSplitter ]
-
-                    viewNonClickablePart : Maybe TreeItem -> Html Msg
-                    viewNonClickablePart val =
-                        Maybe.map (\n -> span [ class "breadcrumb-part" ] [ text n.title ]) val |> Maybe.withDefault (span [] [])
-
-                    viewSplitter =
-                        span [ class "splitter" ] [ text " > " ]
-                in
-                [ [ viewHome, viewSplitter ], intermediateParts, [ viewNonClickablePart selectedNode ] ] |> List.concat
-
-            Root ->
-                []
-        )
-
-
-viewNodeBeingDragged : Model -> Html Msg
-viewNodeBeingDragged model =
-    case model.dragState of
-        DraggingSomething mousePosition itemId ->
-            case Tree.find (hasId itemId) model.nodes of
-                Just node ->
-                    div [ class "box-container" ]
-                        [ div
-                            [ class "box"
-                            , style "top" (String.fromInt mousePosition.layerY ++ "px")
-                            , style "left" (String.fromInt mousePosition.layerX ++ "px")
-                            ]
-                            [ div [ class "bullet-outer" ] [ div [ class "bullet" ] [] ], text node.title ]
-                        ]
+                        Video info ->
+                            img
+                                [ class "image drag-image"
+                                , src ("https://i.ytimg.com/vi/" ++ info.videoId ++ "/mqdefault.jpg")
+                                , style "top" (String.fromInt coords.pageY ++ "px")
+                                , style "left" (String.fromInt coords.pageX ++ "px")
+                                ]
+                                []
 
                 Nothing ->
-                    div [] []
-
-        _ ->
-            div [] []
-
-
-viewSample : Model -> Html Msg
-viewSample model =
-    let
-        focusPointMaybe =
-            case model.focus of
-                Node id ->
-                    Tree.find (hasId id) model.nodes
-
-                Root ->
-                    Nothing
-    in
-    case focusPointMaybe of
-        Just node ->
-            div
-                []
-                [ div [ class "focused-element" ] [ text node.title ]
-                , div [] (List.map (viewNode model.dragState model.nodeBeingEdited) (getChildrenForNode node))
-                ]
+                    emptyElement
 
         Nothing ->
-            div [] (List.map (viewNode model.dragState model.nodeBeingEdited) model.nodes)
+            emptyElement
 
 
-viewNode : DragState -> Maybe EditedNodeState -> TreeItem -> Html Msg
-viewNode dragState nodeEditedState node =
-    div [ class "row" ]
-        [ div [ class "row-title" ]
-            [ viewNodeImage
-                [ attributeIf (not (DragState.isDraggingNode dragState node.id)) (onClick (SetFocus node.id))
-                , ExtraEvents.onMouseDown (\n -> DndAction (DragState.MouseDown node.id n))
-                ]
-                node.payload
-            , viewText nodeEditedState node
-            , div [ class "row-icons" ]
-                [ span [ class "row-icon", onClick (EditNode node.id) ] [ text "E" ]
-                , span [ class "row-icon", onClick (RemoveNode node.id) ] [ text "X" ]
-                ]
-            ]
-        , elementIf node.isVisible
-            (div [ class "children-area" ]
-                (List.map (viewNode dragState nodeEditedState) (getChildrenForNode node))
-            )
+viewSidebar model =
+    div [ class "sidebar" ]
+        [ viewChildren model (getHomeItems model.tree)
         ]
 
 
-viewText nodeEditedState node =
+viewChildren : Model -> List TreeItem -> Html Msg
+viewChildren model childs =
+    div [ class "sidebar-items-children" ]
+        (childs |> List.filter isNotVideo |> List.map (viewSidebarItem model))
+
+
+viewSidebarItem : Model -> TreeItem -> Html Msg
+viewSidebarItem model item =
+    div []
+        [ div
+            [ class "sidebar-item"
+            , classIf (model.focusedNodeId == item.id) "focused"
+            , onClick (Focus item.id)
+            ]
+            [ div
+                [ onClickAlwaysStopPropagation (ToggleVisibilityOnSidebar item.id)
+                , class "sidebar-item-chevron"
+                , classIf item.isVisibleOnSidebar "open"
+                ]
+                [ img [ src Assets.chevron ] [] ]
+            , div [] [ text item.title ]
+            ]
+        , elementIf item.isVisibleOnSidebar
+            (getChildren model.tree item.id |> viewChildren model)
+        ]
+
+
+viewSearch : Model -> Html Msg
+viewSearch model =
+    div [ class "search" ]
+        [ input [ placeholder "Search for videos, channels", class "search-input", onInput OnSearchInput ] []
+        , case model.searchState of
+            SearchSuccess focusNode ->
+                viewTreeBody focusNode model
+
+            SearchIsLoading ->
+                div [] [ text "loading" ]
+        ]
+
+
+viewTree model =
+    div [ class "tree" ]
+        [ viewHeader model
+        , viewTreeBody model.focusedNodeId model
+        , button [ onClick AddNewNodeClicked ] [ text "add" ]
+        ]
+
+
+viewHeader model =
+    if model.focusedNodeId == homeId then
+        emptyElement
+
+    else
+        let
+            parents =
+                getParents model.tree model.focusedNodeId
+
+            focusedNode =
+                findById model.focusedNodeId model.tree |> Maybe.map .title |> Maybe.withDefault ""
+        in
+        div [ class "header" ]
+            (parents
+                |> List.map viewHeaderPart
+                |> List.concat
+                |> flip List.append [ viewFocusedHeaderPart focusedNode ]
+            )
+
+
+viewHeaderPart n =
+    [ div [ class "header-item", onClick (Focus n.id) ] [ text n.title ]
+    , div [] [ text ">" ]
+    ]
+
+
+viewFocusedHeaderPart title =
+    div [ class "header-item" ] [ text title ]
+
+
+viewTreeBody rootNode model =
+    viewHomeChildren model (getChildren model.tree rootNode)
+
+
+viewHomeChildren model nodes =
+    div [ class "children" ]
+        (nodes |> List.map (viewHomeNode model))
+
+
+viewHomeNode model n =
+    let
+        title =
+            case n.payload of
+                Playlist ->
+                    node model n (playlistIcon model n)
+
+                Video info ->
+                    node model n (videoIcon model n info.videoId)
+    in
+    div []
+        [ title
+        , elementIf n.isVisibleOnMainPage
+            (getChildren model.tree n.id |> viewHomeChildren model)
+        ]
+
+
+node model n iconElement =
+    let
+        dropIndicator =
+            case getItemUnder model.dragState of
+                Just ( event, id ) ->
+                    if n.id == id then
+                        case getDragPlacement event of
+                            AfterNode ->
+                                dropPlaceholderAfter
+
+                            BeforeNode ->
+                                dropPlaceholderBefore
+
+                            InsideNode ->
+                                dropPlaceholderInside
+
+                    else
+                        emptyElement
+
+                Nothing ->
+                    emptyElement
+    in
+    div
+        [ class "node-title"
+        , attributeIf (shouldListenToDragEvents model.dragState) (onMouseMoveAlwaysStopPropagation (MouseMoveOverNode n.id))
+        ]
+        [ div [ class "branch" ] []
+        , div [ class "branch-bubble", onClick (ToggleVisibilityOnMainPage n.id) ]
+            [ text
+                (if n.isVisibleOnMainPage then
+                    "-"
+
+                 else
+                    "+"
+                )
+            ]
+        , iconElement
+        , viewText model.editState n
+        , div [ class "row-icon", onClick (EditNode n.id) ] [ text "E" ]
+        , div [ class "row-icon", onClick (RemoveNode n.id) ] [ text "X" ]
+        , dropIndicator
+        ]
+
+
+viewText nodeEditedState n =
     let
         nodeId =
             nodeEditedState |> Maybe.map .id |> Maybe.withDefault ""
@@ -329,7 +459,7 @@ viewText nodeEditedState node =
         nodeText =
             nodeEditedState |> Maybe.map .text |> Maybe.withDefault ""
     in
-    if nodeId == node.id then
+    if nodeId == n.id then
         input
             [ id ("input" ++ nodeId)
             , class "row-title-input"
@@ -340,25 +470,421 @@ viewText nodeEditedState node =
             []
 
     else
-        div [ class "row-title-text", onClick (ToggleVisibility node.id) ] [ text node.title ]
+        div [ class "node-title-text" ] [ text n.title ]
 
 
-viewNodeImage attributes payload =
-    case payload of
+dropPlaceholderBefore =
+    div [ class "drop-placeholder-before" ]
+        [ div [ class "small-circle" ] []
+        ]
+
+
+dropPlaceholderAfter =
+    div [ class "drop-placeholder-after" ]
+        [ div [ class "small-circle" ] []
+        ]
+
+
+dropPlaceholderInside =
+    div [ class "drop-placeholder-inside" ]
+        [ div [ class "small-circle" ] []
+        ]
+
+
+videoIcon model n videoId =
+    img
+        [ src ("https://i.ytimg.com/vi/" ++ videoId ++ "/mqdefault.jpg")
+        , class "image"
+        , classIf (getItemBeingDragged model.dragState |> hasValue n.id) "hide"
+        , onClick (Play videoId)
+        , onMouseDown (MouseDownOnCircle n.id)
+        , draggable "false"
+        ]
+        []
+
+
+playlistIcon model n =
+    div
+        [ class "circle"
+        , classIf (getItemBeingDragged model.dragState |> hasValue n.id) "hide"
+        , onClick (Focus n.id)
+        , onMouseDown (MouseDownOnCircle n.id)
+        ]
+        []
+
+
+
+--TREE STRUCTURE
+
+
+type alias TreeItem =
+    { id : String
+    , title : String
+    , isVisibleOnMainPage : Bool
+    , isVisibleOnSidebar : Bool
+    , children : List String
+    , payload : NodeType
+    }
+
+
+isNotVideo treeItem =
+    case treeItem.payload of
         Playlist ->
-            div
-                (List.append attributes
-                    [ class "bullet-outer"
-                    ]
-                )
-                []
+            True
 
-        Video id ->
-            img
-                (List.append attributes
-                    [ class "bullet-outer video-image"
-                    , src ("https://i.ytimg.com/vi/" ++ id ++ "/default.jpg")
-                    , draggable "false"
-                    ]
-                )
-                []
+        Video _ ->
+            False
+
+
+type NodeType
+    = Playlist
+    | Video VideoInfo
+
+
+type alias HashTree =
+    Dict String TreeItem
+
+
+sampleData : HashTree
+sampleData =
+    Dict.fromList
+        [ channel homeId homeId [ "1", "2" ]
+        , channel "1" "Ambient" [ "1.1", "1.2", "1.3" ]
+        , leafChannel "1.1" "Ambient Child 1"
+        , leafChannel "1.2" "Ambient Child 2"
+        , channel "1.3" "Ambient Child 3" [ "1.3.1", "1.3.2", "1.3.3" ]
+        , leafVideo "1.3.1" "Ambient Child 3 Video 1" "gmQJVl51yCc"
+        , leafVideo "1.3.2" "Ambient Child 3 Video 2" "5o_uF1L5l6o"
+        , leafVideo "1.3.3" "Ambient Child 3 Video 3" "tDolNU89SXI"
+        , leafChannel "2" "Deep House"
+        , channel searchId searchId [ "s1", "s2", "s3", "s4", "s5" ]
+        , leafVideo "s1" "Search results 1" "gmQJVl51yCc"
+        , leafVideo "s2" "Search results 2" "tDolNU89SXI"
+        , leafVideo "s3" "Search results 3" "gmQJVl51yCc"
+        , leafVideo "s4" "Search results 4" "5o_uF1L5l6o"
+        , leafVideo "s5" "Search results 5" "5o_uF1L5l6o"
+        ]
+
+
+createNewNode : String -> TreeItem
+createNewNode id =
+    Tuple.second (leafChannel id "New Node")
+
+
+leafChannel id title =
+    channel id title []
+
+
+leafVideo id title videoId =
+    ( id, TreeItem id title True True [] (Video { videoId = videoId, id = id, title = title }) )
+
+
+channel id title children =
+    ( id, TreeItem id title True True children Playlist )
+
+
+getHomeItems : HashTree -> List TreeItem
+getHomeItems hasTree =
+    getChildren hasTree homeId
+
+
+getChildren : HashTree -> String -> List TreeItem
+getChildren hashTree nodeId =
+    let
+        childrenIds =
+            hashTree
+                |> Dict.get nodeId
+                |> Maybe.map .children
+                |> Maybe.withDefault []
+    in
+    childrenIds
+        |> List.map (flip Dict.get hashTree)
+        |> filterOutNothing
+
+
+getParents : HashTree -> String -> List TreeItem
+getParents tree id =
+    getParentsImp tree id []
+
+
+getParentsImp tree id parents =
+    case findBy (hasChild id) tree of
+        Just parentNode ->
+            getParentsImp tree parentNode.id (parentNode :: parents)
+
+        Nothing ->
+            parents
+
+
+toggleVisibilityOnMainPage : HashTree -> String -> HashTree
+toggleVisibilityOnMainPage hash id =
+    mapItem id (\item -> { item | isVisibleOnMainPage = not item.isVisibleOnMainPage }) hash
+
+
+toggleVisibilityOnSidebar : HashTree -> String -> HashTree
+toggleVisibilityOnSidebar hash id =
+    mapItem id (\item -> { item | isVisibleOnSidebar = not item.isVisibleOnSidebar }) hash
+
+
+removeFromParent id tree =
+    mapParent id (\parent -> { parent | children = parent.children |> List.filter ((/=) id) }) tree
+
+
+insertItemBefore itemBeforeId itemId tree =
+    let
+        mapChild child =
+            if child == itemBeforeId then
+                [ itemId, child ]
+
+            else
+                [ child ]
+    in
+    mapParent itemBeforeId (\item -> { item | children = item.children |> List.map mapChild |> List.concat }) tree
+
+
+insertItemAfter itemBeforeId itemId tree =
+    let
+        mapChild child =
+            if child == itemBeforeId then
+                [ child, itemId ]
+
+            else
+                [ child ]
+    in
+    mapParent itemBeforeId (\item -> { item | children = item.children |> List.map mapChild |> List.concat }) tree
+
+
+insertItemInside parentId newItemId tree =
+    mapItem parentId (\item -> { item | children = newItemId :: item.children }) tree
+
+
+insertItemAsLastChild parentId newItemId tree =
+    mapItem parentId (\item -> { item | children = List.append item.children [ newItemId ] }) tree
+
+
+hasChild id n =
+    List.member id n.children
+
+
+findBy : (TreeItem -> Bool) -> HashTree -> Maybe TreeItem
+findBy predicate tree =
+    Dict.values tree |> List.filter predicate |> List.head
+
+
+findById id tree =
+    Dict.get id tree
+
+
+mapItem id mapper tree =
+    case Dict.get id tree of
+        Just item ->
+            Dict.insert id (mapper item) tree
+
+        Nothing ->
+            tree
+
+
+mapParent id mapper tree =
+    case findBy (hasChild id) tree of
+        Just parent ->
+            tree |> Dict.insert parent.id (mapper parent)
+
+        Nothing ->
+            tree
+
+
+homeId =
+    "Home"
+
+
+searchId =
+    "Search"
+
+
+
+--DRAG STATE
+
+
+type DragState
+    = NoDrag
+    | PressedNotYetMoved MouseMoveEvent String Float
+    | DraggingSomething MouseMoveEvent String (Maybe String)
+
+
+shouldListenToDragEvents : DragState -> Bool
+shouldListenToDragEvents dragState =
+    case dragState of
+        NoDrag ->
+            False
+
+        _ ->
+            True
+
+
+isDraggingSomething dragState =
+    getDraggingCoords dragState |> hasSomething
+
+
+getDraggingCoords dragState =
+    case dragState of
+        DraggingSomething event id _ ->
+            Just ( event, id )
+
+        _ ->
+            Nothing
+
+
+getItemUnder : DragState -> Maybe ( MouseMoveEvent, String )
+getItemUnder dragState =
+    case dragState of
+        DraggingSomething event _ idMaybe ->
+            idMaybe |> Maybe.map (Tuple.pair event)
+
+        _ ->
+            Nothing
+
+
+getItemBeingDragged : DragState -> Maybe String
+getItemBeingDragged dragState =
+    case dragState of
+        DraggingSomething _ id _ ->
+            Just id
+
+        _ ->
+            Nothing
+
+
+updateOnMouseDown event nodeId =
+    PressedNotYetMoved event nodeId 0
+
+
+updateOnMouseMove state newMousePosition overItem =
+    case state of
+        NoDrag ->
+            state
+
+        PressedNotYetMoved previousPosition id distance ->
+            let
+                newDistance =
+                    distance + getDistance previousPosition newMousePosition
+            in
+            --makes much a better UX - we need to drag at least 3 pixels in order to count as drag
+            --otherwise this is considered a click (play if clicking on a card)
+            if newDistance > 5 then
+                DraggingSomething newMousePosition id overItem
+
+            else
+                PressedNotYetMoved newMousePosition id newDistance
+
+        DraggingSomething _ id _ ->
+            DraggingSomething newMousePosition id overItem
+
+
+updateOnDrop model =
+    let
+        itemIdOverM =
+            getItemBeingDragged model.dragState
+
+        itemIdUnderM =
+            getItemUnder model.dragState
+    in
+    case ( itemIdUnderM, itemIdOverM ) of
+        ( Just ( event, itemIdUnder ), Just itemIdOver ) ->
+            let
+                modifier =
+                    case getDragPlacement event of
+                        AfterNode ->
+                            insertItemAfter
+
+                        BeforeNode ->
+                            insertItemBefore
+
+                        InsideNode ->
+                            insertItemInside
+
+                foo =
+                    model.tree
+                        |> removeFromParent itemIdOver
+                        |> modifier itemIdUnder itemIdOver
+            in
+            { model | dragState = NoDrag, tree = foo }
+
+        _ ->
+            { model | dragState = NoDrag }
+
+
+type DragPlacement
+    = AfterNode
+    | BeforeNode
+    | InsideNode
+
+
+
+--TODO: this doesn't account for different height in playlist/video nodes
+-- works only for playlist nodes right now
+-- also align node to the center (current margin only from the top
+-- also offsetY behaves very strange - it sends 0-10 in padded area, then in container starts from the zero again
+
+
+getDragPlacement event =
+    if event.offsetY > 25 then
+        if event.offsetX > 1030 then
+            InsideNode
+
+        else
+            AfterNode
+
+    else
+        BeforeNode
+
+
+getDistance : MouseMoveEvent -> MouseMoveEvent -> Float
+getDistance point1 point2 =
+    sqrt
+        (toFloat
+            ((point1.pageX - point2.pageX)
+                ^ 2
+                + (point1.pageY - point2.pageY)
+                ^ 2
+            )
+        )
+
+
+
+--****EXTRA****
+--FUNCTIONS
+
+
+flip func a b =
+    func b a
+
+
+
+-- LISTS
+
+
+filterOutNothing : List (Maybe a) -> List a
+filterOutNothing maybes =
+    List.filterMap identity maybes
+
+
+
+-- Maybe
+
+
+hasSomething maybe =
+    case maybe of
+        Just _ ->
+            True
+
+        Nothing ->
+            False
+
+
+hasValue value maybe =
+    case maybe of
+        Just maybeValue ->
+            maybeValue == value
+
+        Nothing ->
+            False

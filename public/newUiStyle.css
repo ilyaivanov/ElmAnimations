@@ -1,0 +1,338 @@
+body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+    font-size: 16px;
+    --cicle-size: 30px;
+    --branch-bubble-width: 12px;
+}
+
+.circle {
+    width: var(--cicle-size);
+    height: var(--cicle-size);
+    border-radius: 45px;
+    background-color: #28A745;
+    cursor: pointer;
+}
+
+.hide {
+    visibility: hidden;
+}
+
+.circle:hover {
+    background-color: #aabadb;
+}
+
+.branch {
+    position: absolute;
+    margin-left: calc(var(--cicle-size) / -2);
+    width: calc(var(--cicle-size) / 2);
+    height: 2px;
+    background-color: #E1E4E8;
+}
+
+.branch-bubble {
+    /*relative to the children left border*/
+    z-index: 1;
+    position: absolute;
+    margin-left: calc(var(--cicle-size) / -2 - var(--branch-bubble-width) / 2);
+    width: var(--branch-bubble-width);
+    height: var(--branch-bubble-width);
+    border-radius: var(--branch-bubble-width);
+    background-color: #E1E4E8;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.branch-bubble:hover {
+    background-color: #a6bad5;
+}
+
+.node-title {
+    margin-left: -1000px;
+    padding-left: 1000px;
+    padding-top: 10px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    position: relative;
+}
+
+
+.image {
+    width: 80px;
+    border-radius: 4px;
+    border: 2px solid #E1E4E8;
+}
+
+
+.node-title-text {
+    margin-left: 10px;
+}
+
+.node-title:hover .row-icon {
+    visibility: visible;
+}
+
+.row-icon {
+    color: gray;
+    margin-left: 20px;
+    visibility: hidden;
+    cursor: pointer;
+}
+
+.row-icon:hover {
+    text-decoration: underline;
+}
+
+.children {
+    margin-left: calc(var(--cicle-size) / 2 - 1px);
+    padding-left: calc(var(--cicle-size) / 2);
+    position: relative;
+}
+
+.children:after {
+    content: "";
+    background: #E1E4E8;
+    position: absolute;
+    top: 0;
+    left: -1px;
+    height: calc(100% - 18px);
+    width: 2px;
+}
+
+.children + .node-title {
+    padding-top: 0;
+}
+
+.buttons {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    display: flex;
+    width: 80px;
+    flex-direction: column;
+    justify-content: stretch;
+}
+
+.search-input {
+    margin-left: 10px;
+    margin-right: 10px;
+    box-sizing: border-box;
+    border: 2px solid #E1E4E8;
+    border-radius: 4px;
+    width: calc(100% - 20px);
+}
+
+.page {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    height: 100vh;
+}
+
+.page-during-drag {
+    user-select: none;
+    cursor: grabbing;
+}
+
+/*Unfortunately I don't know any other way to disable cursor effects on all nodes*/
+/*Thus I will need to disable ALL cursor effects in my app */
+.page-during-drag .drag-bolt,
+.page-during-drag .drag-image,
+.page-during-drag .node-title-text,
+.page-during-drag .circle {
+    cursor: inherit;
+    pointer-events: none;
+}
+
+.sidebar {
+    width: 200px;
+    overflow: auto;
+}
+
+.search {
+    flex: 1;
+    overflow: auto;
+}
+
+.tree {
+    overflow: auto;
+    flex: 1;
+}
+
+/*SIDEBAR*/
+.sidebar-item {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    cursor: pointer;
+    margin-left: -500px;
+    padding-left: 500px;
+}
+
+
+.sidebar-item:hover {
+    background-color: #E1E4E8;
+}
+
+.sidebar-item.focused {
+    background-color: #aabadb;
+}
+
+
+.sidebar-item-chevron {
+    cursor: pointer;
+    border-radius: 50px;
+    height: 20px;
+    width: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.1s linear;
+}
+
+.sidebar-item-chevron:hover {
+    background-color: #b1b2b8;
+}
+
+.sidebar-item-chevron > img {
+    width: 10px;
+    height: 10px;
+}
+
+.sidebar-item-chevron.open {
+    transform: rotateZ(90deg);
+}
+
+
+.sidebar-items-children {
+    margin-left: 10px;
+}
+
+
+/*HEADER*/
+
+.header {
+    display: flex;
+    align-items: center;
+    color: grey;
+}
+
+.header > div {
+    margin-right: 5px;
+}
+
+.header-item {
+    cursor: pointer;
+}
+
+.header-item:hover {
+    text-decoration: underline;
+}
+
+
+/*Drag UI*/
+.drag-bolt {
+    position: absolute;
+    border-radius: 30px;
+    background-color: #28A745;
+    pointer-events: none;
+    animation-name: dragBoltShrink;
+    animation-duration: 0.5s;
+
+    width: 16px;
+    height: 16px;
+    transform: translate(-8px, -8px);
+}
+
+@keyframes dragBoltShrink {
+    from {
+        width: var(--cicle-size);
+        height: var(--cicle-size);
+        transform: translate(-15px, -15px);
+    }
+    to {
+        width: 16px;
+        height: 16px;
+        transform: translate(-8px, -8px);
+    }
+}
+
+@keyframes dragImageShrink {
+    from {
+        width: 80px;
+        transform: translate(-40px, -15px);
+    }
+    to {
+        width: 40px;
+        transform: translate(-20px, -8px);
+    }
+}
+
+.drag-image {
+    position: absolute;
+    animation-name: dragImageShrink;
+    animation-duration: 0.5s;
+    width: 40px;
+    transform: translate(-20px, -8px);
+}
+
+.drop-placeholder-before {
+    position: absolute;
+    width: 21px;
+    height: 3px;
+    background-color: #E1E4E8;
+    top: 4px;
+    left: 985px;
+}
+
+.drop-placeholder-after {
+    position: absolute;
+    width: 21px;
+    height: 3px;
+    background-color: #E1E4E8;
+    bottom: -7px;
+    left: 985px;
+}
+
+.drop-placeholder-inside {
+    position: absolute;
+    width: 23px;
+    height: 3px;
+    background-color: #E1E4E8;
+    bottom: -7px;
+    left: 1012px;
+}
+
+.small-circle {
+    width: 10px;
+    height: 10px;
+    background-color: #28A745;
+    border-radius: 10px;
+    position: absolute;
+    right: -7px;
+    margin-top: -4px;
+}
+
+
+/*INPUT*/
+.row-title-input {
+    margin-left: 6px;
+    width: 400px;
+    font-family: inherit;
+    font-size: inherit;
+}
+
+/*Player*/
+#youtubePlayer{
+    position: absolute;
+    width: 400px;
+    height: 150px;
+    right: 20px;
+    bottom: 20px;
+
+}
