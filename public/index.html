@@ -9,10 +9,11 @@
     <title>Grenfield</title>
     <link rel="stylesheet" href="/newUiStyle.css?v=0.1"/>
     <script type="text/javascript" src="/elm.js?v=0.1"></script>
-    <script type="text/javascript" src="/focusPorts.js?v=0.1"></script>
-    <script type="text/javascript" src="/firebasePorts.js?v=0.1"></script>
-    <script type="text/javascript" src="/scrollPorts.js?v=0.1"></script>
-    <script type="text/javascript" src="/searchPorts.js?v=0.1"></script>
+    <script type="text/javascript" src="/ports/focus.js?v=0.1"></script>
+    <script type="text/javascript" src="/ports/firebase.js?v=0.1"></script>
+    <script type="text/javascript" src="/ports/scroll.js?v=0.1"></script>
+    <script type="text/javascript" src="/ports/search.js?v=0.1"></script>
+    <script type="text/javascript" src="/ports/player.js?v=0.1"></script>
 </head>
 <body>
 <div id="elm-node">
@@ -25,6 +26,7 @@
   });
 
   // registerDragPorts(app.ports);
+  registerPlayerPorts(app.ports);
   registerSearchPorts(app.ports);
   registerFocusPorts(app.ports);
   registerFirebasePorts(app.ports);

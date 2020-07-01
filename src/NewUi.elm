@@ -27,6 +27,7 @@ type alias Model =
     , editState : Maybe EditedNodeState
     , searchTerm : String
     , currentSearchId : String
+    , currentVideo : Maybe String
     }
 
 
@@ -43,6 +44,7 @@ init _ =
       , editState = Nothing
       , searchTerm = ""
       , currentSearchId = ""
+      , currentVideo = Nothing
       }
     , Cmd.none
     )
@@ -98,6 +100,7 @@ type Msg
     | AttemptToSearch String
     | DebouncedSearch String String
     | GotVideos (List VideoInfo)
+    | Play String
 
 
 type SearchState
@@ -237,6 +240,9 @@ update msg model =
             in
             ( { model | tree = newTree, searchState = SearchSuccess searchId }, Cmd.none )
 
+        Play videoId ->
+            ( model, Ports.play videoId )
+
         None ->
             ( model, Cmd.none )
 
@@ -257,6 +263,7 @@ view model =
         , viewTree model
         , viewDragItem model
         , viewSearch model
+        , div [ id "youtubePlayer" ] []
         ]
 
 
@@ -496,7 +503,7 @@ videoIcon model n videoId =
         [ src ("https://i.ytimg.com/vi/" ++ videoId ++ "/mqdefault.jpg")
         , class "image"
         , classIf (getItemBeingDragged model.dragState |> hasValue n.id) "hide"
-        , onClick (Focus n.id)
+        , onClick (Play videoId)
         , onMouseDown (MouseDownOnCircle n.id)
         , draggable "false"
         ]

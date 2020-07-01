@@ -326,3 +326,13 @@ body {
     font-family: inherit;
     font-size: inherit;
 }
+
+/*Player*/
+#youtubePlayer{
+    position: absolute;
+    width: 400px;
+    height: 150px;
+    right: 20px;
+    bottom: 20px;
+
+}

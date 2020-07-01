@@ -21,6 +21,7 @@ port gotNewId : (String -> msg) -> Sub msg
 
 port generateNewId : () -> Cmd msg
 port findVideos : String -> Cmd msg
+port play : String -> Cmd msg
 
 
 requestNewId =
