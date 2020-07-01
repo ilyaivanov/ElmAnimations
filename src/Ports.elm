@@ -13,12 +13,14 @@ port onEditStart : String -> Cmd msg
 
 
 port onWindowKeyUp : (Json.Value -> msg) -> Sub msg
+port gotVideos : (List VideoInfo -> msg) -> Sub msg
 
 
 port gotNewId : (String -> msg) -> Sub msg
 
 
 port generateNewId : () -> Cmd msg
+port findVideos : String -> Cmd msg
 
 
 requestNewId =
@@ -34,3 +36,9 @@ sendEndDrag =
 
 
 port scrollToTop : () -> Cmd msg
+
+type alias VideoInfo =
+    { id : String
+    , videoId : String
+    , title : String
+    }

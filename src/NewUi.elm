@@ -2,13 +2,17 @@ module NewUi exposing (main)
 
 import Assets
 import Browser
+import Debug exposing (log)
 import Dict exposing (Dict)
 import ExtraEvents exposing (MouseMoveEvent, attributeIf, classIf, emptyElement, onClickAlwaysStopPropagation, onMouseDown, onMouseMove, onMouseMoveAlwaysStopPropagation, onMouseUp)
 import Html exposing (Attribute, Html, button, div, img, input, text)
 import Html.Attributes exposing (class, draggable, id, placeholder, src, style, value)
 import Html.Events exposing (onBlur, onClick, onInput)
 import Json.Decode as Json
-import Ports
+import Ports exposing (VideoInfo)
+import Process
+import Random
+import Task
 
 
 main =
@@ -18,8 +22,11 @@ main =
 type alias Model =
     { tree : HashTree
     , focusedNodeId : String
+    , searchState : SearchState
     , dragState : DragState
     , editState : Maybe EditedNodeState
+    , searchTerm : String
+    , currentSearchId : String
     }
 
 
@@ -31,8 +38,11 @@ init : () -> ( Model, Cmd Msg )
 init _ =
     ( { tree = sampleData
       , focusedNodeId = homeId
+      , searchState = SearchSuccess searchId
       , dragState = NoDrag
       , editState = Nothing
+      , searchTerm = ""
+      , currentSearchId = ""
       }
     , Cmd.none
     )
@@ -43,6 +53,7 @@ subscriptions _ =
     Sub.batch
         [ Ports.gotNewId AddNewNode
         , Ports.onWindowKeyUp mapLoadedBoards
+        , Ports.gotVideos GotVideos
         ]
 
 
@@ -83,6 +94,15 @@ type Msg
     | CompleteEdit
     | OnKeyPressed KeyPressedEvent
     | RevertEdit
+    | OnSearchInput String
+    | AttemptToSearch String
+    | DebouncedSearch String String
+    | GotVideos (List VideoInfo)
+
+
+type SearchState
+    = SearchSuccess String
+    | SearchIsLoading
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -156,7 +176,6 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        --
         RevertEdit ->
             ( { model | editState = Nothing }, Cmd.none )
 
@@ -165,13 +184,66 @@ update msg model =
             , Cmd.none
             )
 
+        OnSearchInput val ->
+            ( { model | searchTerm = val }
+            , Random.generate AttemptToSearch createId
+            )
+
+        AttemptToSearch debouncedSearchId ->
+            ( { model | currentSearchId = debouncedSearchId }
+            , Process.sleep 500 |> Task.perform (always (DebouncedSearch debouncedSearchId model.searchTerm))
+            )
+
+        DebouncedSearch id term ->
+            if id == model.currentSearchId then
+                ( { model | currentSearchId = "", searchState = SearchIsLoading }
+                , Ports.findVideos term
+                )
+
+            else
+                ( model, Cmd.none )
+
         ToggleVisibilityOnSidebar id ->
             ( { model | tree = toggleVisibilityOnSidebar model.tree id }
             , Cmd.none
             )
 
+        GotVideos videos ->
+            let
+                insert n dict =
+                    Dict.insert n.id n dict
+
+                createVideoNode : VideoInfo -> TreeItem
+                createVideoNode info =
+                    { id = info.id
+                    , title = info.title
+                    , payload = Video info
+                    , isVisibleOnSidebar = False
+                    , isVisibleOnMainPage = False
+                    , children = []
+                    }
+
+                ids =
+                    List.map .id videos
+
+
+                setChildren n =
+                    { n | children = ids }
+
+                newTree =
+                    videos
+                        |> List.map createVideoNode
+                        |> List.foldr insert model.tree
+                        |> mapItem searchId setChildren
+            in
+            ( { model | tree = newTree, searchState = SearchSuccess searchId }, Cmd.none )
+
         None ->
             ( model, Cmd.none )
+
+
+createId =
+    Random.float 0 1 |> Random.map String.fromFloat
 
 
 view : Model -> Html Msg
@@ -185,8 +257,7 @@ view model =
         [ viewSidebar model
         , viewTree model
         , viewDragItem model
-
-        --, viewSearch
+        , viewSearch model
         ]
 
 
@@ -258,17 +329,23 @@ viewSidebarItem model item =
         ]
 
 
+viewSearch : Model -> Html Msg
 viewSearch model =
     div [ class "search" ]
-        [ input [ placeholder "Search for videos, channels", class "search-input" ] []
-        , viewTree model
+        [ input [ placeholder "Search for videos, channels", class "search-input", onInput OnSearchInput ] []
+        , case model.searchState of
+            SearchSuccess focusNode ->
+                viewTreeBody focusNode model
+
+            SearchIsLoading ->
+                div [] [ text "loading" ]
         ]
 
 
 viewTree model =
     div [ class "tree" ]
         [ viewHeader model
-        , viewTreeBody model
+        , viewTreeBody model.focusedNodeId model
         , button [ onClick AddNewNodeClicked ] [ text "add" ]
         ]
 
@@ -303,8 +380,8 @@ viewFocusedHeaderPart title =
     div [ class "header-item" ] [ text title ]
 
 
-viewTreeBody model =
-    viewHomeChildren model (getChildren model.tree model.focusedNodeId)
+viewTreeBody rootNode model =
+    viewHomeChildren model (getChildren model.tree rootNode)
 
 
 viewHomeChildren model nodes =
@@ -457,8 +534,6 @@ type NodeType
     | Video VideoInfo
 
 
-type alias VideoInfo =
-    { videoId : String }
 
 
 type alias HashTree =
@@ -477,6 +552,12 @@ sampleData =
         , leafVideo "1.3.2" "Ambient Child 3 Video 2" "5o_uF1L5l6o"
         , leafVideo "1.3.3" "Ambient Child 3 Video 3" "tDolNU89SXI"
         , leafChannel "2" "Deep House"
+        , channel searchId searchId [ "s1", "s2", "s3", "s4", "s5" ]
+        , leafVideo "s1" "Search results 1" "gmQJVl51yCc"
+        , leafVideo "s2" "Search results 2" "tDolNU89SXI"
+        , leafVideo "s3" "Search results 3" "gmQJVl51yCc"
+        , leafVideo "s4" "Search results 4" "5o_uF1L5l6o"
+        , leafVideo "s5" "Search results 5" "5o_uF1L5l6o"
         ]
 
 
@@ -490,7 +571,7 @@ leafChannel id title =
 
 
 leafVideo id title videoId =
-    ( id, TreeItem id title True True [] (Video { videoId = videoId }) )
+    ( id, TreeItem id title True True [] (Video { videoId = videoId, id = id, title = title }) )
 
 
 channel id title children =
@@ -609,6 +690,10 @@ mapParent id mapper tree =
 
 homeId =
     "Home"
+
+
+searchId =
+    "Search"
 
 
 
