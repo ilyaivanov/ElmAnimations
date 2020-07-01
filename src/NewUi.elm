@@ -226,7 +226,6 @@ update msg model =
                 ids =
                     List.map .id videos
 
-
                 setChildren n =
                     { n | children = ids }
 
@@ -298,11 +297,10 @@ viewSidebar model =
         ]
 
 
+viewChildren : Model -> List TreeItem -> Html Msg
 viewChildren model childs =
     div [ class "sidebar-items-children" ]
-        (List.map (viewSidebarItem model)
-            childs
-        )
+        (childs |> List.filter isNotVideo |> List.map (viewSidebarItem model))
 
 
 viewSidebarItem : Model -> TreeItem -> Html Msg
@@ -529,11 +527,18 @@ type alias TreeItem =
     }
 
 
+isNotVideo treeItem =
+    case treeItem.payload of
+        Playlist ->
+            True
+
+        Video _ ->
+            False
+
+
 type NodeType
     = Playlist
     | Video VideoInfo
-
-
 
 
 type alias HashTree =
